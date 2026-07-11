@@ -1,0 +1,164 @@
+.label-format-panel .var-chip {
+  display: inline-block;
+  font-size: .7rem;
+  padding: .15rem .45rem;
+  margin: .15rem .15rem 0 0;
+  border-radius: 999px;
+  background: var(--bg-secondary, #f1f5f9);
+  color: var(--primary, #2563eb);
+  cursor: pointer;
+  border: 1px solid rgba(37, 99, 235, .2);
+}
+.label-format-panel .var-chip:hover { background: rgba(37, 99, 235, .1); }
+
+.label-preview-wrap {
+  background: #e2e8f0;
+  border-radius: .75rem;
+  padding: 1.5rem;
+  min-height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.label-sheet-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  width: 100%;
+}
+
+.print-label {
+  background: #fff;
+  border: 1px dashed #94a3b8;
+  box-sizing: border-box;
+  padding: 8mm 6mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.print-label.layout-stacked .label-to { flex: 1; min-height: 0; }
+.print-label.layout-stacked .label-from {
+  border-top: 1px solid #cbd5e1;
+  padding-top: 4mm;
+  margin-top: auto;
+  flex-shrink: 0;
+}
+
+.print-label.layout-side {
+  flex-direction: row;
+  gap: 4mm;
+}
+.print-label.layout-side .label-to,
+.print-label.layout-side .label-from {
+  flex: 1;
+  min-width: 0;
+}
+.print-label.layout-side .label-from {
+  border-left: 1px solid #cbd5e1;
+  padding-left: 4mm;
+}
+
+.print-label.layout-from-only,
+.print-label.layout-to-only {
+  justify-content: flex-start;
+}
+
+.print-label.layout-from-only .label-from,
+.print-label.layout-to-only .label-to {
+  flex: 1;
+  width: 100%;
+}
+
+.label-heading {
+  font-size: .65em;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: #64748b;
+  font-weight: 600;
+  margin-bottom: 2mm;
+}
+
+.label-body {
+  white-space: pre-line;
+  line-height: 1.45;
+}
+
+.selected-contact-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .25rem .6rem;
+  margin: .2rem;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, .1);
+  font-size: .85rem;
+}
+
+.selected-contact-chip button {
+  border: none;
+  background: none;
+  padding: 0;
+  line-height: 1;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.contact-pick-item {
+  cursor: pointer;
+  transition: background .15s;
+}
+.contact-pick-item:hover { background: rgba(37, 99, 235, .06); }
+
+/* Off-screen / PDF render area */
+#printArea { display: none; }
+
+.print-sheet {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: flex-start;
+  gap: 2mm;
+  width: 194mm;
+}
+
+@media print {
+  @page { size: A4 portrait; margin: 8mm; }
+
+  body > *:not(#printArea) { display: none !important; }
+
+  #printArea {
+    display: block !important;
+    position: static;
+    width: 100%;
+  }
+
+  .print-sheet {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    align-items: flex-start;
+    gap: 2mm;
+    width: 100%;
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .print-sheet:last-child { page-break-after: auto; break-after: auto; }
+
+  .print-label {
+    border: 1px solid #ccc;
+    box-shadow: none;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    margin: 0;
+    overflow: visible !important;
+    height: auto !important;
+    padding: 4mm 5mm;
+  }
+}

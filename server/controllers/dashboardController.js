@@ -1,13 +1,9 @@
-const jsonStore = require('../utils/jsonStore');
 const Contact = require('../models/Contact');
 const Message = require('../models/Message');
 const Campaign = require('../models/Campaign');
 const CommunicationHistory = require('../models/CommunicationHistory');
 const Notification = require('../models/Notification');
 const Event = require('../models/Event');
-
-let useMongo = false;
-function setUseMongo(val) { useMongo = val; }
 
 function countByField(items, field) {
   const map = {};
@@ -30,25 +26,14 @@ function birthdaysByMonth(contacts) {
 const dashboardController = {
   async getStats(req, res) {
     try {
-      let contacts, messages, campaigns, events, commHistory, notifications;
-
-      if (useMongo) {
-        [contacts, messages, campaigns, events, commHistory, notifications] = await Promise.all([
-          Contact.find(),
-          Message.find(),
-          Campaign.find(),
-          Event.find(),
-          CommunicationHistory.find().sort({ sentAt: -1 }).limit(10),
-          Notification.find().sort({ createdAt: -1 }).limit(10)
-        ]);
-      } else {
-        contacts = jsonStore.getAll('contacts');
-        messages = jsonStore.getAll('messages');
-        campaigns = jsonStore.getAll('campaigns');
-        events = jsonStore.getAll('events');
-        commHistory = jsonStore.getAll('communicationHistory').slice(0, 10);
-        notifications = jsonStore.getAll('notifications').slice(0, 10);
-      }
+      const [contacts, messages, campaigns, events, commHistory, notifications] = await Promise.all([
+        Contact.find(),
+        Message.find(),
+        Campaign.find(),
+        Event.find(),
+        CommunicationHistory.find().sort({ sentAt: -1 }).limit(10),
+        Notification.find().sort({ createdAt: -1 }).limit(10)
+      ]);
 
       const today = new Date();
       const todayBirthdays = contacts.filter(c => {
@@ -128,5 +113,4 @@ const dashboardController = {
   }
 };
 
-dashboardController.setUseMongo = setUseMongo;
 module.exports = dashboardController;

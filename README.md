@@ -1,122 +1,125 @@
 # Relationship Management System (RMS)
 
-Premium SaaS-style CRM for managing contacts, celebrations, campaigns, and outreach.
+Premium CRM for managing contacts, celebrations, campaigns, and outreach.
 
-## Tech Stack
+## Stack
 
-- **Frontend:** HTML5, CSS3, Bootstrap 5, Vanilla JavaScript, Bootstrap Icons, Chart.js, DataTables
-- **Backend:** Node.js, Express.js
-- **Database:** MongoDB Atlas (with local JSON fallback)
-- **Auth:** JWT Authentication
-- **Storage:** Local uploads (`public/uploads/`) — Cloudinary-ready architecture
+- Frontend: static HTML, Bootstrap, vanilla JavaScript
+- Backend: Node.js, Express
+- Database: MongoDB through the Express backend
+- Auth: JWT
+- Storage: local uploads under `public/uploads/`
 
-## Quick Start
+The browser never connects directly to MongoDB. It calls same-origin `/api/...`
+routes served by Express.
 
-```bash
-# Install dependencies
+## Local Run
+
+Configure `.env` from `.env.example`, then:
+
+```powershell
 npm install
-
-# Generate sample data (200 contacts, festivals, events, etc.)
-npm run seed
-
-# Start the server
 npm start
 ```
 
-Open **http://localhost:3000**
+Open `http://localhost:3000`.
 
-### Demo Login
+## Seed Data
 
-| Email | Password |
-|-------|----------|
-| admin@rms.com | admin123 |
+Seed scripts read Mongo connection settings from `.env`.
 
-## MongoDB Atlas (Optional)
+If the Mongo user was created in the Mongo `admin` database, include
+`authSource=admin` in `MONGODB_URI`:
 
-Copy `.env.example` to `.env` and set your connection string:
-
-```
-MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/rms
-JWT_SECRET=your-secret-key
+```env
+MONGODB_URI=mongodb://mongoadmin:strongpassword@localhost:27018/rms?authSource=admin
 ```
 
-Without MongoDB, the app runs in **local JSON mode** using `data/sample-data.json`.
+`rms` is the database where application data is stored. `authSource=admin` is
+only the database used to authenticate the Mongo user.
 
-## Project Structure
+Run the scripts in this order:
 
-```
-RMS/
-├── server.js                 # Express entry point
-├── server/
-│   ├── config/               # Database config
-│   ├── controllers/          # MVC controllers
-│   ├── middleware/           # Auth, file upload
-│   ├── models/               # Mongoose schemas
-│   ├── routes/               # API routes
-│   ├── seed/                 # Sample data generator
-│   └── utils/                # JSON store fallback
-├── public/
-│   ├── index.html            # Login page
-│   ├── pages/                # All module pages
-│   ├── assets/css/           # Premium theme
-│   ├── assets/js/            # Components, API, pages
-│   └── uploads/              # Local file storage
-└── data/
-    └── sample-data.json      # Generated sample database
+1. Create or reset the first admin user.
+
+```powershell
+npm run seed:admin -- --email admin@rms.com --password "change-this-password" --name "RMS Admin"
 ```
 
-## Modules
+2. Preview the sample business-data import.
 
-1. **Login** — JWT auth, forgot password, remember me
-2. **Dashboard** — Stats, charts, quick actions, notifications
-3. **Contacts** — Full CRUD, filters, DataTables, profile view
-4. **Groups** — Dynamic smart groups with rules
-5. **Birthdays** — Calendar, templates, send/schedule wishes
-6. **Anniversaries** — Same as birthdays
-7. **Festivals** — Master, recipients, schedule, send
-8. **Invitations** — Events, preview, delivery tracking
-9. **Campaigns** — Multi-channel campaigns, drafts, reports
-10. **Templates** — Reusable variables (`{{Name}}`, `{{City}}`, etc.)
-11. **Reports** — City/sector/religion charts, delivery reports
-12. **Settings** — Company, SMTP, WhatsApp API, roles, users
-13. **Profile** — User profile, password, notification prefs
+```powershell
+npm run seed:sample -- --dry-run
+```
 
-## API Endpoints
+3. Import sample business data.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | /api/auth/login | Login |
-| GET | /api/dashboard/stats | Dashboard data |
-| GET/POST/PUT/DELETE | /api/contacts | Contact CRUD |
-| GET/POST/PUT/DELETE | /api/groups | Group CRUD |
-| GET/POST/PUT/DELETE | /api/festivals | Festival CRUD |
-| GET/POST/PUT/DELETE | /api/events | Event/Invitation CRUD |
-| GET/POST/PUT/DELETE | /api/campaigns | Campaign CRUD |
-| GET/POST/PUT/DELETE | /api/templates | Template CRUD |
-| GET | /api/reports/* | Analytics reports |
-| GET/PUT | /api/settings | App settings |
-| POST | /api/delivery/jobs | Queue bulk email/WhatsApp delivery |
-| GET | /api/delivery/jobs | List delivery jobs |
-| GET | /api/delivery/jobs/:id | Job status & progress |
-| GET | /api/delivery/jobs/:id/messages | Per-message delivery log |
-| POST | /api/delivery/jobs/:id/retry-failed | Requeue failed messages |
-| POST | /api/delivery/test-email | Test SMTP configuration |
-| GET | /api/delivery/logs | Recent delivery engine logs |
+```powershell
+npm run seed:sample
+```
 
-## Delivery Engine (Production)
+The sample import skips demo users and imports only business data. It refuses
+to import into non-empty business collections unless you explicitly replace
+existing sample/business data:
 
-- Background worker processes messages in batches
-- Email via SMTP (nodemailer) with connection pooling
-- WhatsApp via Meta Graph API (when configured)
-- Invalid email/phone validation before send
-- Automatic retry with exponential backoff (default 3 retries)
-- Per-message status: pending → processing → delivered / failed / skipped
-- Delivery job tracking UI at `/pages/delivery.html`
-- File logs at `logs/rms-delivery.log`
+```powershell
+npm run seed:sample -- --replace
+```
 
-Set `DELIVERY_DRY_RUN=true` in `.env` to test without sending real emails.
-Configure SMTP in **Settings** for production email delivery.
+## Production Notes
 
-## License
+RMS is Mongo-only. If `MONGODB_URI` is missing or Mongo is unreachable, startup
+fails instead of falling back to local JSON data.
 
-MIT
+There is no public registration route. Seed the first admin user, then create
+all other users from the admin settings page.
+
+The RMS UI is static HTML served by the Express backend, so the production
+deployment uses one long-running RMS application container. MongoDB remains the
+existing shared VPS Mongo container.
+
+## Docker Deployment
+
+Build, save, upload, and deploy the image:
+
+```powershell
+.\scripts\build-save-upload-image.ps1 `
+  -Tag rms-001 `
+  -VpsHost 159.198.70.19 `
+  -VpsUser deploy `
+  -PublicBaseUrl https://rms.heliorsoft.com `
+  -DeployAfterUpload
+```
+
+If the image was already uploaded and you only need to recreate the VPS
+container:
+
+```powershell
+.\scripts\deploy-on-vps.ps1 `
+  -Tag rms-001 `
+  -VpsHost 159.198.70.19 `
+  -VpsUser deploy `
+  -PublicBaseUrl https://rms.heliorsoft.com `
+  -Deploy
+```
+
+The compose file is intentionally separate from the shared VPS Caddy setup:
+`deploy/docker-compose.rms.yml`.
+
+Add the example in `deploy/Caddyfile.rms.example` to the existing VPS Caddyfile.
+
+After first deployment, run the seed sequence on the VPS:
+
+```bash
+cd /opt/apps/rms
+docker compose run --rm rms-app npm run seed:admin -- --email admin@rms.com --password "change-this-password" --name "RMS Admin"
+docker compose run --rm rms-app npm run seed:sample -- --dry-run
+docker compose run --rm rms-app npm run seed:sample
+```
+
+Make sure `/opt/apps/rms/.env` has real values for `MONGODB_URI` and
+`JWT_SECRET` before running the app or seed command.
+
+```bash
+docker compose run --rm rms-app npm run seed:sample -- --replace
+```

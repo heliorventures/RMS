@@ -1,0 +1,11 @@
+# Add this block to the existing VPS Caddyfile.
+# The Caddy container must be attached to the same Docker network as rms-app.
+
+rms.heliorsoft.com {
+    # Keep this line if the existing Caddyfile uses the same Cloudflare origin cert.
+    tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
+
+    encode gzip
+
+    reverse_proxy rms-app:3000
+}

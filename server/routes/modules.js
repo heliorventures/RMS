@@ -26,12 +26,6 @@ const messageCtrl = createCrud(Message, 'messages');
 const commCtrl = createCrud(CommunicationHistory, 'communicationHistory');
 const notifCtrl = createCrud(Notification, 'notifications');
 
-const controllers = { festivalCtrl, eventCtrl, templateCtrl, campaignCtrl, messageCtrl, commCtrl, notifCtrl };
-
-function setUseMongo(val) {
-  Object.values(controllers).forEach(c => c.setUseMongo(val));
-}
-
 const router = express.Router();
 router.use(auth);
 
@@ -63,4 +57,4 @@ const notifications = express.Router();
 mountCrud(notifications, notifCtrl);
 router.use('/notifications', notifications);
 
-module.exports = { router, setUseMongo, controllers };
+module.exports = { router };

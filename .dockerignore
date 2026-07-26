@@ -1,0 +1,11 @@
+node_modules
+npm-debug.log
+.env
+.git
+.gitignore
+data
+logs
+public/uploads/*
+dist-images
+deploy/.env
+deploy/*.local

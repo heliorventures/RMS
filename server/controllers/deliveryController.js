@@ -4,9 +4,6 @@ const { validateRecipient } = require('../utils/validators');
 const emailService = require('../services/emailService');
 const logger = require('../utils/logger');
 
-let useMongo = false;
-function setUseMongo(val) { useMongo = val; }
-
 const DEFAULT_MAX_RETRIES = Number(process.env.DELIVERY_MAX_RETRIES) || 3;
 const DEFAULT_BATCH = Number(process.env.DELIVERY_BATCH_SIZE) || 25;
 
@@ -216,8 +213,7 @@ const deliveryController = {
   getJobMessages,
   retryFailed,
   testEmail,
-  getLogs,
-  setUseMongo
+  getLogs
 };
 
 module.exports = deliveryController;

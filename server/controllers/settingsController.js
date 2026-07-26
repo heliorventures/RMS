@@ -1,9 +1,5 @@
-const jsonStore = require('../utils/jsonStore');
 const Settings = require('../models/Settings');
-const bcrypt = require('bcryptjs');
-
-let useMongo = false;
-function setUseMongo(val) { useMongo = val; }
+const User = require('../models/User');
 
 function stripPassword(user) {
   if (!user) return null;
@@ -26,14 +22,10 @@ function sanitizeSettingsForUser(settings, user) {
 const settingsController = {
   async get(req, res) {
     try {
-      if (useMongo) {
-        let settings = await Settings.findOne();
-        if (!settings) settings = await Settings.create({});
-        const data = sanitizeSettingsForUser(settings.toObject ? settings.toObject() : settings, req.user);
-        return res.json({ success: true, data });
-      }
-      const settings = sanitizeSettingsForUser(jsonStore.getSettings(), req.user);
-      res.json({ success: true, data: settings });
+      let settings = await Settings.findOne();
+      if (!settings) settings = await Settings.create({});
+      const data = sanitizeSettingsForUser(settings.toObject ? settings.toObject() : settings, req.user);
+      res.json({ success: true, data });
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
     }
@@ -41,11 +33,7 @@ const settingsController = {
 
   async update(req, res) {
     try {
-      if (useMongo) {
-        let settings = await Settings.findOneAndUpdate({}, req.body, { new: true, upsert: true });
-        return res.json({ success: true, data: settings });
-      }
-      const settings = jsonStore.updateSettings(req.body);
+      const settings = await Settings.findOneAndUpdate({}, req.body, { new: true, upsert: true });
       res.json({ success: true, data: settings });
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
@@ -54,12 +42,7 @@ const settingsController = {
 
   async getUsers(req, res) {
     try {
-      if (useMongo) {
-        const User = require('../models/User');
-        const users = await User.find().select('-password');
-        return res.json({ success: true, data: users });
-      }
-      const users = jsonStore.getAll('users').map(({ password, ...u }) => u);
+      const users = await User.find().select('-password');
       res.json({ success: true, data: users });
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
@@ -76,29 +59,12 @@ const settingsController = {
       const normalizedEmail = email.trim().toLowerCase();
       const userRole = role || 'user';
 
-      if (useMongo) {
-        const User = require('../models/User');
-        const exists = await User.findOne({ email: normalizedEmail });
-        if (exists) return res.status(400).json({ success: false, message: 'Email already exists.' });
-        const user = await User.create({
-          name: name.trim(),
-          email: normalizedEmail,
-          password,
-          role: userRole,
-          phone: phone || '',
-          isActive: isActive !== false
-        });
-        return res.status(201).json({ success: true, data: stripPassword(user), message: 'User created.' });
-      }
-
-      const exists = jsonStore.getAll('users').find(u => u.email?.toLowerCase() === normalizedEmail);
+      const exists = await User.findOne({ email: normalizedEmail });
       if (exists) return res.status(400).json({ success: false, message: 'Email already exists.' });
-
-      const hashed = await bcrypt.hash(password, 12);
-      const user = jsonStore.create('users', {
+      const user = await User.create({
         name: name.trim(),
         email: normalizedEmail,
-        password: hashed,
+        password,
         role: userRole,
         phone: phone || '',
         isActive: isActive !== false
@@ -114,42 +80,20 @@ const settingsController = {
       const { id } = req.params;
       const { name, email, password, role, phone, isActive } = req.body;
 
-      if (useMongo) {
-        const User = require('../models/User');
-        const user = await User.findById(id);
-        if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+      const user = await User.findById(id);
+      if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
 
-        if (email && email.toLowerCase() !== user.email) {
-          const exists = await User.findOne({ email: email.toLowerCase() });
-          if (exists) return res.status(400).json({ success: false, message: 'Email already exists.' });
-          user.email = email.trim().toLowerCase();
-        }
-        if (name) user.name = name.trim();
-        if (role) user.role = role;
-        if (phone !== undefined) user.phone = phone;
-        if (isActive !== undefined) user.isActive = isActive;
-        if (password) user.password = password;
-        await user.save();
-        return res.json({ success: true, data: stripPassword(user), message: 'User updated.' });
+      if (email && email.toLowerCase() !== user.email) {
+        const exists = await User.findOne({ email: email.toLowerCase() });
+        if (exists) return res.status(400).json({ success: false, message: 'Email already exists.' });
+        user.email = email.trim().toLowerCase();
       }
-
-      const existing = jsonStore.getById('users', id);
-      if (!existing) return res.status(404).json({ success: false, message: 'User not found.' });
-
-      if (email && email.toLowerCase() !== existing.email?.toLowerCase()) {
-        const dup = jsonStore.getAll('users').find(u => u._id !== id && u.email?.toLowerCase() === email.toLowerCase());
-        if (dup) return res.status(400).json({ success: false, message: 'Email already exists.' });
-      }
-
-      const updates = {};
-      if (name) updates.name = name.trim();
-      if (email) updates.email = email.trim().toLowerCase();
-      if (role) updates.role = role;
-      if (phone !== undefined) updates.phone = phone;
-      if (isActive !== undefined) updates.isActive = isActive;
-      if (password) updates.password = await bcrypt.hash(password, 12);
-
-      const user = jsonStore.update('users', id, updates);
+      if (name) user.name = name.trim();
+      if (role) user.role = role;
+      if (phone !== undefined) user.phone = phone;
+      if (isActive !== undefined) user.isActive = isActive;
+      if (password) user.password = password;
+      await user.save();
       res.json({ success: true, data: stripPassword(user), message: 'User updated.' });
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
@@ -163,14 +107,7 @@ const settingsController = {
         return res.status(400).json({ success: false, message: 'You cannot deactivate your own account.' });
       }
 
-      if (useMongo) {
-        const User = require('../models/User');
-        const user = await User.findByIdAndUpdate(id, { isActive: false }, { new: true }).select('-password');
-        if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
-        return res.json({ success: true, data: user, message: 'User deactivated.' });
-      }
-
-      const user = jsonStore.update('users', id, { isActive: false });
+      const user = await User.findByIdAndUpdate(id, { isActive: false }, { new: true }).select('-password');
       if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
       res.json({ success: true, data: stripPassword(user), message: 'User deactivated.' });
     } catch (err) {
@@ -188,24 +125,14 @@ const settingsController = {
         return res.status(400).json({ success: false, message: 'Permissions must be an array.' });
       }
 
-      if (useMongo) {
-        let settings = await Settings.findOne();
-        if (!settings) settings = await Settings.create({});
-        const roles = [...(settings.roles || [])];
-        const idx = roles.findIndex(r => r.name === roleName);
-        if (idx === -1) return res.status(404).json({ success: false, message: 'Role not found.' });
-        roles[idx] = { name: name || roleName, permissions };
-        settings.roles = roles;
-        await settings.save();
-        return res.json({ success: true, data: roles[idx], message: 'Role updated.' });
-      }
-
-      const settings = jsonStore.getSettings();
+      let settings = await Settings.findOne();
+      if (!settings) settings = await Settings.create({});
       const roles = [...(settings.roles || [])];
       const idx = roles.findIndex(r => r.name === roleName);
       if (idx === -1) return res.status(404).json({ success: false, message: 'Role not found.' });
       roles[idx] = { name: name || roleName, permissions };
-      jsonStore.updateSettings({ roles });
+      settings.roles = roles;
+      await settings.save();
       res.json({ success: true, data: roles[idx], message: 'Role updated.' });
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
@@ -213,5 +140,4 @@ const settingsController = {
   }
 };
 
-settingsController.setUseMongo = setUseMongo;
 module.exports = settingsController;

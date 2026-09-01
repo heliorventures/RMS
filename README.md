@@ -38,6 +38,49 @@ MONGODB_URI=mongodb://mongoadmin:strongpassword@localhost:27018/rms?authSource=a
 `rms` is the database where application data is stored. `authSource=admin` is
 only the database used to authenticate the Mongo user.
 
+## MongoDB Data Cleanup
+
+Use `npm run data:delete` to remove RMS business documents from MongoDB. It
+deletes MongoDB documents only: the `users` and `settings` collections are
+protected and preserved, and `/app/public/uploads` is left unchanged.
+
+Do not use `npm run seed:sample -- --replace` for cleanup. That command first
+replaces sample/business data and then imports sample data, so it does not
+leave the database empty.
+
+Before any execution, create and verify a recoverable MongoDB backup. On the
+VPS, stop only the RMS application before the dry run and deletion. This
+prevents the RMS delivery worker from racing with the deletion while leaving
+shared services running.
+
+```bash
+cd /opt/apps/rms
+docker compose stop rms-app
+docker compose run --rm --no-deps rms-app npm run data:delete -- --database=rms --collections=all
+docker compose run --rm --no-deps rms-app npm run data:delete -- --database=rms --collections=all --execute --confirm=DELETE_RMS_DATA
+docker compose up -d rms-app
+docker compose ps
+curl -fsS https://rms.heliorsoft.com/api/health
+```
+
+The first `data:delete` command is a dry run: it reports the selected and
+protected collection counts without writing to MongoDB. The second command is
+the destructive execution. It requires all of `--database=rms`, `--execute`,
+and `--confirm=DELETE_RMS_DATA`; `--database` must exactly match the database
+selected by `MONGODB_URI`.
+
+For a scoped, non-destructive preview, select only registered collection names:
+
+```bash
+docker compose run --rm --no-deps rms-app npm run data:delete -- --database=rms --collections=contacts,groups
+```
+
+Collection names must come from the deletion script registry. The deletable
+names are `messages`, `deliveryJobs`, `communicationHistory`, `campaigns`,
+`events`, `festivals`, `notifications`, `contacts`, `groups`, and `templates`;
+use `all` to select all of them. Attempts to select `users` or `settings` fail
+because those collections are protected.
+
 Run the scripts in this order:
 
 1. Create or reset the first admin user.

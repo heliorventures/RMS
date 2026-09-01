@@ -7,7 +7,8 @@
     "start": "node server.js",
     "dev": "node server.js",
     "seed:admin": "node server/seed/seed-admin.js",
-    "seed:sample": "node server/seed/import-sample-data.js"
+    "seed:sample": "node server/seed/import-sample-data.js",
+    "data:delete": "node server/maintenance/delete-data.js"
   },
   "keywords": [
     "crm",

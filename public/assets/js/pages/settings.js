@@ -103,7 +103,7 @@ document.getElementById('pageBody').innerHTML = `
 
           <div class="col-md-6"><label class="form-label">From Name</label><input class="form-control" id="smtpFromName"></div>
 
-          <div class="col-12"><button class="btn btn-primary" onclick="saveSettings('smtp')">Save SMTP</button> <button class="btn btn-outline-secondary" onclick="testSmtp()">Test Connection</button></div>
+          <div class="col-12"><small class="d-block text-secondary mb-2">Port 587 uses STARTTLS; port 465 uses implicit TLS. The server can override this through SMTP_TLS_MODE.</small><button class="btn btn-primary" onclick="saveSettings('smtp')">Save SMTP</button> <button class="btn btn-outline-secondary" onclick="testSmtp()">Test Connection</button></div>
 
         </div>
 

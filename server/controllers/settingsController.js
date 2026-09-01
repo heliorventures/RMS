@@ -1,5 +1,6 @@
 const Settings = require('../models/Settings');
 const User = require('../models/User');
+const { buildSmtpSettingsUpdate, sanitizeSettingsForUser } = require('../utils/smtpSettings');
 
 function stripPassword(user) {
   if (!user) return null;
@@ -7,24 +8,12 @@ function stripPassword(user) {
   return safe;
 }
 
-function sanitizeSettingsForUser(settings, user) {
-  if (user?.role === 'admin') return settings;
-  return {
-    company: settings?.company,
-    labels: settings?.labels,
-    theme: settings?.theme ? {
-      primaryColor: settings.theme.primaryColor,
-      darkMode: settings.theme.darkMode
-    } : undefined
-  };
-}
-
 const settingsController = {
   async get(req, res) {
     try {
       let settings = await Settings.findOne();
       if (!settings) settings = await Settings.create({});
-      const data = sanitizeSettingsForUser(settings.toObject ? settings.toObject() : settings, req.user);
+      const data = sanitizeSettingsForUser(settings, req.user);
       res.json({ success: true, data });
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
@@ -33,8 +22,14 @@ const settingsController = {
 
   async update(req, res) {
     try {
-      const settings = await Settings.findOneAndUpdate({}, req.body, { new: true, upsert: true });
-      res.json({ success: true, data: settings });
+      const { smtp, ...settingsFields } = req.body || {};
+      const update = { ...settingsFields, ...buildSmtpSettingsUpdate(smtp) };
+      const settings = await Settings.findOneAndUpdate(
+        {},
+        { $set: update },
+        { new: true, upsert: true, setDefaultsOnInsert: true }
+      );
+      res.json({ success: true, data: sanitizeSettingsForUser(settings, req.user) });
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
     }

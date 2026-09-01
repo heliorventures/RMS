@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 const logger = require('../utils/logger');
 
 let transporterCache = null;
@@ -8,8 +9,57 @@ function isDryRun() {
   return process.env.DELIVERY_DRY_RUN === 'true';
 }
 
+function resolveSmtpPort(port) {
+  const normalizedPort = Number(port);
+  return Number.isInteger(normalizedPort) && normalizedPort > 0 && normalizedPort <= 65535
+    ? normalizedPort
+    : 587;
+}
+
+function resolveSmtpTlsMode() {
+  const mode = (process.env.SMTP_TLS_MODE || 'auto').trim().toLowerCase();
+  if (!['auto', 'starttls', 'implicit'].includes(mode)) {
+    throw new Error('SMTP_TLS_MODE must be one of: auto, starttls, implicit');
+  }
+  return mode;
+}
+
 function buildCacheKey(smtp) {
-  return `${smtp.host}:${smtp.port}:${smtp.user}:${smtp.fromEmail}`;
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify({
+      host: smtp?.host || '',
+      port: resolveSmtpPort(smtp?.port),
+      user: smtp?.user || '',
+      password: smtp?.password || smtp?.pass || '',
+      tlsMode: resolveSmtpTlsMode()
+    }))
+    .digest('hex');
+}
+
+function buildSmtpTransportOptions(smtp) {
+  const port = resolveSmtpPort(smtp?.port);
+  const tlsMode = resolveSmtpTlsMode();
+  const secure = tlsMode === 'implicit' || (tlsMode === 'auto' && port === 465);
+
+  return {
+    host: smtp.host,
+    port,
+    secure,
+    requireTLS: !secure,
+    auth: { user: smtp.user, pass: smtp.password || smtp.pass || '' },
+    pool: true,
+    maxConnections: Number(process.env.SMTP_MAX_CONNECTIONS) || 5,
+    maxMessages: Number(process.env.SMTP_MAX_MESSAGES) || 100
+  };
+}
+
+function closeTransporter() {
+  if (transporterCache && typeof transporterCache.close === 'function') {
+    transporterCache.close();
+  }
+  transporterCache = null;
+  cacheKey = null;
 }
 
 async function getTransporter(smtp) {
@@ -19,15 +69,8 @@ async function getTransporter(smtp) {
   const key = buildCacheKey(smtp);
   if (transporterCache && cacheKey === key) return transporterCache;
 
-  transporterCache = nodemailer.createTransport({
-    host: smtp.host,
-    port: Number(smtp.port) || 587,
-    secure: smtp.secure === true || smtp.port === 465,
-    auth: { user: smtp.user, pass: smtp.password || smtp.pass || '' },
-    pool: true,
-    maxConnections: Number(process.env.SMTP_MAX_CONNECTIONS) || 5,
-    maxMessages: Number(process.env.SMTP_MAX_MESSAGES) || 100
-  });
+  closeTransporter();
+  transporterCache = nodemailer.createTransport(buildSmtpTransportOptions(smtp));
 
   cacheKey = key;
   return transporterCache;
@@ -35,9 +78,9 @@ async function getTransporter(smtp) {
 
 async function verifySmtp(smtp) {
   if (isDryRun()) return { ok: true, mode: 'dry-run' };
-  const transporter = await getTransporter(smtp);
-  if (!transporter) return { ok: false, error: 'SMTP is not configured. Set host, user, and password in Settings.' };
   try {
+    const transporter = await getTransporter(smtp);
+    if (!transporter) return { ok: false, error: 'SMTP is not configured. Set host, user, and password in Settings.' };
     await transporter.verify();
     return { ok: true, mode: 'smtp' };
   } catch (err) {
@@ -52,16 +95,16 @@ async function sendEmail({ smtp, to, subject, body, fromName }) {
     return { success: true, messageId: `dry-${Date.now()}`, mode: 'dry-run' };
   }
 
-  const transporter = await getTransporter(smtp);
-  if (!transporter) {
-    return { success: false, error: 'SMTP not configured' };
-  }
-
-  const from = fromName
-    ? `"${fromName}" <${smtp.fromEmail || smtp.user}>`
-    : (smtp.fromEmail || smtp.user);
-
   try {
+    const transporter = await getTransporter(smtp);
+    if (!transporter) {
+      return { success: false, error: 'SMTP not configured' };
+    }
+
+    const from = fromName
+      ? `"${fromName}" <${smtp.fromEmail || smtp.user}>`
+      : (smtp.fromEmail || smtp.user);
+
     const info = await transporter.sendMail({
       from,
       to,
@@ -78,8 +121,15 @@ async function sendEmail({ smtp, to, subject, body, fromName }) {
 }
 
 function resetTransporter() {
-  transporterCache = null;
-  cacheKey = null;
+  closeTransporter();
 }
 
-module.exports = { sendEmail, verifySmtp, isDryRun, resetTransporter };
+module.exports = {
+  sendEmail,
+  verifySmtp,
+  isDryRun,
+  resetTransporter,
+  buildCacheKey,
+  buildSmtpTransportOptions,
+  resolveSmtpTlsMode
+};

@@ -15,8 +15,7 @@ const settingsSchema = new mongoose.Schema({
     user: String,
     password: String,
     fromEmail: String,
-    fromName: String,
-    secure: { type: Boolean, default: true }
+    fromName: String
   },
   whatsapp: {
     apiUrl: String,

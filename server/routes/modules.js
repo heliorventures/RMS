@@ -4,7 +4,6 @@ const Festival = require('../models/Festival');
 const Event = require('../models/Event');
 const Template = require('../models/Template');
 const Campaign = require('../models/Campaign');
-const Message = require('../models/Message');
 const CommunicationHistory = require('../models/CommunicationHistory');
 const Notification = require('../models/Notification');
 const upload = require('../middleware/upload');
@@ -22,7 +21,6 @@ const festivalCtrl = createCrud(Festival, 'festivals');
 const eventCtrl = createCrud(Event, 'events');
 const templateCtrl = createCrud(Template, 'templates');
 const campaignCtrl = createCrud(Campaign, 'campaigns');
-const messageCtrl = createCrud(Message, 'messages');
 const commCtrl = createCrud(CommunicationHistory, 'communicationHistory');
 const notifCtrl = createCrud(Notification, 'notifications');
 
@@ -44,10 +42,6 @@ router.use('/templates', templates);
 const campaigns = express.Router();
 mountCrud(campaigns, campaignCtrl);
 router.use('/campaigns', campaigns);
-
-const messages = express.Router();
-mountCrud(messages, messageCtrl);
-router.use('/messages', messages);
 
 const communication = express.Router();
 mountCrud(communication, commCtrl);

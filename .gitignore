@@ -8,3 +8,5 @@ npm-debug.log
 public/uploads/*
 !public/uploads/.gitkeep
 .DS_Store
+playwright-report/
+test-results/

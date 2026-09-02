@@ -6,6 +6,10 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
+    "test": "node --test test/*.test.js",
+    "test:unit": "node --test test/*.test.js",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
     "seed:admin": "node server/seed/seed-admin.js",
     "seed:sample": "node server/seed/import-sample-data.js",
     "data:delete": "node server/maintenance/delete-data.js"
@@ -30,5 +34,13 @@
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.16",
     "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.62.1",
+    "bootstrap": "^5.3.3",
+    "datatables.net": "^1.13.8",
+    "datatables.net-bs5": "^1.13.8",
+    "jquery": "^3.7.1"
   }
 }

@@ -22,7 +22,7 @@ document.getElementById('pageBody').innerHTML = `
         <div class="col-12"><label class="form-label">Schedule</label><input type="datetime-local" class="form-control" id="campSchedule"></div>
       </div>
     </form></div>
-    <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" onclick="saveCampaign()">Save Draft</button><button class="btn btn-success" onclick="scheduleCampaign()"><i class="bi bi-calendar-check"></i> Schedule</button></div>
+    <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" onclick="saveCampaign(this)">Save Draft</button><button class="btn btn-success" onclick="scheduleCampaign(this)"><i class="bi bi-calendar-check"></i> Schedule</button></div>
   </div></div></div>`;
 
 loadCampaigns();
@@ -30,30 +30,54 @@ async function loadCampaigns() {
   const res = await RMS.api.get('/campaigns');
   const campaigns = res?.data || [];
   document.getElementById('totalCampaigns').textContent = campaigns.length;
-  document.getElementById('completedCampaigns').textContent = campaigns.filter(c=>c.status==='completed').length;
-  document.getElementById('scheduledCampaigns').textContent = campaigns.filter(c=>c.status==='scheduled').length;
-  document.getElementById('draftCampaigns').textContent = campaigns.filter(c=>c.status==='draft').length;
+  document.getElementById('completedCampaigns').textContent = campaigns.filter(c => c.status === 'completed').length;
+  document.getElementById('scheduledCampaigns').textContent = campaigns.filter(c => c.status === 'scheduled').length;
+  document.getElementById('draftCampaigns').textContent = campaigns.filter(c => c.status === 'draft').length;
   $('#campaignsTable').DataTable({
-    data: campaigns, destroy: true,
+    data: campaigns,
+    destroy: true,
     columns: [
-      { data: 'name', render: n => `<span class="fw-semibold">${n}</span>` },
-      { data: 'type', render: t => `<span class="badge bg-primary-subtle text-primary">${t}</span>` },
+      { data: 'name', render: name => `<span class="fw-semibold">${name}</span>` },
+      { data: 'type', render: type => `<span class="badge bg-primary-subtle text-primary">${type}</span>` },
       { data: 'channel' },
-      { data: 'status', render: s => RMS.utils.statusBadge(s) },
-      { data: 'stats', render: s => s?.sent || 0 },
-      { data: 'stats', render: s => s?.delivered || 0 },
-      { data: 'stats', render: s => s?.failed || 0 },
-      { data: null, orderable: false, render: c => `<button class="btn btn-sm btn-outline-primary" onclick="RMS.toast.show('Delivery report opened')"><i class="bi bi-bar-chart"></i></button> <button class="btn btn-sm btn-outline-danger" onclick="deleteCampaign('${c._id}')"><i class="bi bi-trash"></i></button>` }
-    ], pageLength: 10
+      { data: 'status', render: status => RMS.utils.statusBadge(status) },
+      { data: 'stats', render: stats => stats?.sent || 0 },
+      { data: 'stats', render: stats => stats?.delivered || 0 },
+      { data: 'stats', render: stats => stats?.failed || 0 },
+      { data: null, orderable: false, render: campaign => `<button class="btn btn-sm btn-outline-primary" onclick="RMS.toast.show('Delivery report opened')"><i class="bi bi-bar-chart"></i></button> <button class="btn btn-sm btn-outline-danger" onclick="deleteCampaign('${campaign._id}')"><i class="bi bi-trash"></i></button>` }
+    ],
+    pageLength: 10
   });
 }
-window.openCampaignModal = () => document.getElementById('campaignForm').reset();
-window.saveCampaign = async () => {
-  const data = { name: document.getElementById('campName').value, type: document.getElementById('campType').value, channel: document.getElementById('campChannel').value, status: 'draft', content: document.getElementById('campContent').value, stats: { total: 0, sent: 0, delivered: 0, failed: 0 } };
-  const res = await RMS.api.post('/campaigns', data);
-  if (res?.success) { RMS.toast.show('Campaign saved as draft'); bootstrap.Modal.getInstance(document.getElementById('campaignModal')).hide(); loadCampaigns(); }
+
+window.openCampaignModal = () => {
+  document.getElementById('campaignForm').reset();
+  RMS.mutations.clearFormErrors(document.getElementById('campaignForm'));
 };
-window.scheduleCampaign = async () => {
+
+window.saveCampaign = async (button) => {
+  const data = {
+    name: document.getElementById('campName').value,
+    type: document.getElementById('campType').value,
+    channel: document.getElementById('campChannel').value,
+    status: 'draft',
+    content: document.getElementById('campContent').value,
+    stats: { total: 0, sent: 0, delivered: 0, failed: 0 }
+  };
+  if (!data.name.trim()) return RMS.mutations.showValidationError('#campaignForm', 'Campaign name is required', '#campName');
+
+  const result = await RMS.mutations.runMutation(button, () => RMS.api.post('/campaigns', data), {
+    form: '#campaignForm',
+    pending: 'Saving…',
+    success: 'Campaign saved as draft'
+  });
+  if (result.ok) {
+    bootstrap.Modal.getInstance(document.getElementById('campaignModal')).hide();
+    await loadCampaigns();
+  }
+};
+
+window.scheduleCampaign = async (button) => {
   const data = {
     name: document.getElementById('campName').value,
     type: document.getElementById('campType').value,
@@ -63,31 +87,41 @@ window.scheduleCampaign = async () => {
     scheduledAt: document.getElementById('campSchedule').value,
     stats: { total: 0, sent: 0, delivered: 0, failed: 0 }
   };
-  if (!data.name?.trim()) {
-    RMS.toast.show('Campaign name is required', 'warning');
-    return;
-  }
-  const campRes = await RMS.api.post('/campaigns', data);
-  if (!campRes?.success) {
-    RMS.toast.show(campRes?.message || 'Campaign save failed', 'error');
-    return;
-  }
-  const jobRes = await RMS.api.post('/delivery/jobs', {
-    name: data.name,
-    type: 'campaign',
-    channel: data.channel,
-    subject: data.name,
-    body: data.content || 'Hello {{Name}}',
-    campaignId: campRes.data._id,
-    audience: 'all'
+  if (!data.name.trim()) return RMS.mutations.showValidationError('#campaignForm', 'Campaign name is required', '#campName');
+
+  let campaignSaved = false;
+  const result = await RMS.mutations.runMutation(button, async () => {
+    const campaign = await RMS.api.post('/campaigns', data);
+    campaignSaved = true;
+    return RMS.api.post('/delivery/jobs', {
+      name: data.name,
+      type: 'campaign',
+      channel: data.channel,
+      subject: data.name,
+      body: data.content || 'Hello {{Name}}',
+      campaignId: campaign.data._id,
+      audience: 'all'
+    });
+  }, {
+    form: '#campaignForm',
+    pending: 'Scheduling…',
+    success: (job) => {
+      const total = job.data?.stats?.total ?? job.message;
+      return `Campaign queued — ${typeof total === 'number' ? total + ' messages' : total}`;
+    },
+    error: (error) => campaignSaved ? `Campaign saved, but delivery queue failed: ${error.message}` : error.message
   });
-  if (jobRes?.success) {
-    const total = jobRes.data?.stats?.total ?? jobRes.message;
-    RMS.toast.show(`Campaign queued — ${typeof total === 'number' ? total + ' messages' : total}`, 'success');
-  } else {
-    RMS.toast.show(jobRes?.message || 'Delivery queue failed', 'error');
+  if (result.ok) {
+    bootstrap.Modal.getInstance(document.getElementById('campaignModal')).hide();
+    await loadCampaigns();
   }
-  bootstrap.Modal.getInstance(document.getElementById('campaignModal')).hide();
-  loadCampaigns();
 };
-window.deleteCampaign = (id) => RMS.components.confirmDelete(null, async () => { await RMS.api.delete(`/campaigns/${id}`); loadCampaigns(); });
+
+window.deleteCampaign = (id) => RMS.components.confirmDelete(null, (button) => RMS.mutations.runMutation(button, async () => {
+  await RMS.api.delete(`/campaigns/${id}`);
+  await loadCampaigns();
+}, {
+  pending: 'Deleting…',
+  success: 'Campaign deleted',
+  errorTarget: '#rmsConfirmStatus'
+}));

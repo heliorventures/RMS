@@ -81,13 +81,13 @@ document.getElementById('pageBody').innerHTML = `
 
           <div class="col-12"><label class="form-label">Logo</label><input type="file" class="form-control" accept="image/*"></div>
 
-          <div class="col-12"><button type="button" class="btn btn-primary" onclick="saveSettings('company')">Save Company Details</button></div>
+          <div class="col-12"><button type="button" class="btn btn-primary" onclick="saveSettings(this, 'company')">Save Company Details</button></div>
 
         </div>
 
       </form></div></div></div>
 
-      <div class="tab-pane fade" id="smtp"><div class="card"><div class="card-header">SMTP Settings</div><div class="card-body">
+      <div class="tab-pane fade" id="smtp"><div class="card"><div class="card-header">SMTP Settings</div><div class="card-body" id="smtpForm">
 
         <div class="row g-3">
 
@@ -103,13 +103,13 @@ document.getElementById('pageBody').innerHTML = `
 
           <div class="col-md-6"><label class="form-label">From Name</label><input class="form-control" id="smtpFromName"></div>
 
-          <div class="col-12"><small class="d-block text-secondary mb-2">Port 587 uses STARTTLS; port 465 uses implicit TLS. The server can override this through SMTP_TLS_MODE.</small><button class="btn btn-primary" onclick="saveSettings('smtp')">Save SMTP</button> <button class="btn btn-outline-secondary" onclick="testSmtp()">Test Connection</button></div>
+          <div class="col-12"><small class="d-block text-secondary mb-2">Port 587 uses STARTTLS; port 465 uses implicit TLS. The server can override this through SMTP_TLS_MODE.</small><button class="btn btn-primary" onclick="saveSettings(this, 'smtp')">Save SMTP</button> <button class="btn btn-outline-secondary" onclick="testSmtp(this)">Test Connection</button></div>
 
         </div>
 
       </div></div></div>
 
-      <div class="tab-pane fade" id="whatsapp"><div class="card"><div class="card-header">WhatsApp API Settings</div><div class="card-body">
+      <div class="tab-pane fade" id="whatsapp"><div class="card"><div class="card-header">WhatsApp API Settings</div><div class="card-body" id="whatsappForm">
 
         <div class="row g-3">
 
@@ -121,13 +121,13 @@ document.getElementById('pageBody').innerHTML = `
 
           <div class="col-12"><label class="form-label">Business Account ID</label><input class="form-control" id="waBusinessId"></div>
 
-          <div class="col-12"><button class="btn btn-primary" onclick="saveSettings('whatsapp')">Save WhatsApp Settings</button></div>
+          <div class="col-12"><button class="btn btn-primary" onclick="saveSettings(this, 'whatsapp')">Save WhatsApp Settings</button></div>
 
         </div>
 
       </div></div></div>
 
-      <div class="tab-pane fade" id="theme"><div class="card"><div class="card-header">Theme Settings</div><div class="card-body">
+      <div class="tab-pane fade" id="theme"><div class="card"><div class="card-header">Theme Settings</div><div class="card-body" id="themeForm">
 
         <div class="mb-3"><label class="form-label">Primary Color</label><input type="color" class="form-control form-control-color" id="themeColor" value="#2563eb"></div>
 
@@ -137,7 +137,7 @@ document.getElementById('pageBody').innerHTML = `
 
         <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="autoAnniversary" checked><label class="form-check-label">Auto Anniversary Wishes</label></div>
 
-        <button class="btn btn-primary" onclick="saveSettings('theme')">Save Theme</button>
+        <button class="btn btn-primary" onclick="saveSettings(this, 'theme')">Save Theme</button>
 
       </div></div></div>
 
@@ -177,7 +177,7 @@ document.getElementById('pageBody').innerHTML = `
 
       <div class="modal-header gradient"><h5 class="modal-title" id="userModalTitle">Add User</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
 
-      <div class="modal-body">
+      <div class="modal-body" id="userForm">
 
         <input type="hidden" id="userId">
 
@@ -195,7 +195,7 @@ document.getElementById('pageBody').innerHTML = `
 
       </div>
 
-      <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" onclick="saveUser()">Save User</button></div>
+      <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" onclick="saveUser(this)">Save User</button></div>
 
     </div></div></div>
 
@@ -207,7 +207,7 @@ document.getElementById('pageBody').innerHTML = `
 
       <div class="modal-header gradient"><h5 class="modal-title" id="roleModalTitle">Edit Role</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
 
-      <div class="modal-body">
+      <div class="modal-body" id="roleForm">
 
         <input type="hidden" id="roleOriginalName">
 
@@ -219,7 +219,7 @@ document.getElementById('pageBody').innerHTML = `
 
       </div>
 
-      <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" onclick="saveRole()">Save Role</button></div>
+      <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" onclick="saveRole(this)">Save Role</button></div>
 
     </div></div></div>`;
 
@@ -355,6 +355,8 @@ function renderUsers() {
 
 window.openUserModal = () => {
 
+  RMS.mutations.clearFormErrors(document.getElementById('userForm'));
+
   document.getElementById('userModalTitle').textContent = 'Add User';
 
   document.getElementById('userId').value = '';
@@ -389,6 +391,8 @@ window.editUser = (id) => {
 
   if (!user) return RMS.toast.show('User not found', 'error');
 
+  RMS.mutations.clearFormErrors(document.getElementById('userForm'));
+
 
 
   document.getElementById('userModalTitle').textContent = 'Edit User';
@@ -419,7 +423,7 @@ window.editUser = (id) => {
 
 
 
-window.saveUser = async () => {
+window.saveUser = async (button) => {
 
   const id = document.getElementById('userId').value;
 
@@ -442,18 +446,13 @@ window.saveUser = async () => {
 
 
   if (!payload.name || !payload.email) {
-
-    RMS.toast.show('Name and email are required', 'warning');
-
-    return;
+    const field = !payload.name ? '#userName' : '#userEmail';
+    return RMS.mutations.showValidationError('#userForm', 'Name and email are required', field);
 
   }
 
   if (!id && (!password || password.length < 6)) {
-
-    RMS.toast.show('Password must be at least 6 characters', 'warning');
-
-    return;
+    return RMS.mutations.showValidationError('#userForm', 'Password must be at least 6 characters', '#userPassword');
 
   }
 
@@ -461,27 +460,21 @@ window.saveUser = async () => {
 
 
 
-  const res = id
+  const result = await RMS.mutations.runMutation(
+    button,
+    () => id
+      ? RMS.api.put(`/settings/users/${id}`, payload)
+      : RMS.api.post('/settings/users', payload),
+    {
+      form: '#userForm',
+      pending: 'Saving…',
+      success: (res) => res.message || (id ? 'User updated' : 'User created')
+    }
+  );
 
-    ? await RMS.api.put(`/settings/users/${id}`, payload)
-
-    : await RMS.api.post('/settings/users', payload);
-
-
-
-  if (res?.success) {
-
-    RMS.toast.show(res.message || (id ? 'User updated' : 'User created'));
-
-    bootstrap.Modal.getInstance(document.getElementById('userModal')).hide();
-
-    await loadUsers();
-
-  } else {
-
-    RMS.toast.show(res?.message || 'Failed to save user', 'error');
-
-  }
+  if (!result.ok) return;
+  bootstrap.Modal.getInstance(document.getElementById('userModal')).hide();
+  await loadUsers();
 
 };
 
@@ -489,22 +482,14 @@ window.saveUser = async () => {
 
 window.deactivateUser = (id) => {
 
-  RMS.components.confirmDelete('Deactivate this user? They will no longer be able to login.', async () => {
-
-    const res = await RMS.api.delete(`/settings/users/${id}`);
-
-    if (res?.success) {
-
-      RMS.toast.show('User deactivated');
-
-      await loadUsers();
-
-    } else {
-
-      RMS.toast.show(res?.message || 'Failed to deactivate user', 'error');
-
-    }
-
+  RMS.components.confirmDelete('Deactivate this user? They will no longer be able to login.', async (button) => {
+    const result = await RMS.mutations.runMutation(button, () => RMS.api.delete(`/settings/users/${id}`), {
+      errorTarget: '#rmsConfirmStatus',
+      pending: 'Deactivating…',
+      success: 'User deactivated'
+    });
+    if (result.ok) await loadUsers();
+    return result;
   });
 
 };
@@ -518,6 +503,8 @@ window.editRole = (encodedName) => {
   const role = allRoles.find(r => r.name === roleName);
 
   if (!role) return RMS.toast.show('Role not found', 'error');
+
+  RMS.mutations.clearFormErrors(document.getElementById('roleForm'));
 
 
 
@@ -575,7 +562,7 @@ window.editRole = (encodedName) => {
 
 
 
-window.saveRole = async () => {
+window.saveRole = async (button) => {
 
   const roleName = document.getElementById('roleOriginalName').value;
 
@@ -586,77 +573,63 @@ window.saveRole = async () => {
 
 
   if (!name) {
-
-    RMS.toast.show('Role name is required', 'warning');
-
-    return;
+    return RMS.mutations.showValidationError('#roleForm', 'Role name is required', '#roleName');
 
   }
 
   if (!permissions.length) {
-
-    RMS.toast.show('Select at least one permission', 'warning');
-
-    return;
+    return RMS.mutations.showValidationError('#roleForm', 'Select at least one permission');
 
   }
 
 
 
-  const res = await RMS.api.put('/settings/roles', { roleName, name, permissions });
+  const result = await RMS.mutations.runMutation(
+    button,
+    () => RMS.api.put('/settings/roles', { roleName, name, permissions }),
+    { form: '#roleForm', pending: 'Saving…', success: 'Role updated successfully' }
+  );
+  if (!result.ok) return;
 
-  if (res?.success) {
-
-    RMS.toast.show('Role updated successfully');
-
-    bootstrap.Modal.getInstance(document.getElementById('roleModal')).hide();
-
-    const settingsRes = await RMS.api.get('/settings');
-
-    allRoles = settingsRes?.data?.roles || [];
-
-    renderRoles();
-
-  } else {
-
-    RMS.toast.show(res?.message || 'Failed to update role', 'error');
-
-  }
+  bootstrap.Modal.getInstance(document.getElementById('roleModal')).hide();
+  const settingsRes = await RMS.api.get('/settings');
+  allRoles = settingsRes?.data?.roles || [];
+  renderRoles();
 
 };
 
 
 
-window.saveSettings = async (section) => {
+function settingsPayload(section) {
+  if (section === 'company') return { company: { name: document.getElementById('compName').value, email: document.getElementById('compEmail').value, phone: document.getElementById('compPhone').value, website: document.getElementById('compWebsite').value, address: document.getElementById('compAddress').value } };
+  if (section === 'smtp') return { smtp: { host: document.getElementById('smtpHost').value, port: +document.getElementById('smtpPort').value, user: document.getElementById('smtpUser').value, password: document.getElementById('smtpPass').value, fromEmail: document.getElementById('smtpFrom').value, fromName: document.getElementById('smtpFromName').value } };
+  if (section === 'whatsapp') return { whatsapp: { apiUrl: document.getElementById('waUrl').value, apiKey: document.getElementById('waKey').value, phoneNumberId: document.getElementById('waPhoneId').value, businessAccountId: document.getElementById('waBusinessId').value } };
+  if (section === 'theme') return { theme: { primaryColor: document.getElementById('themeColor').value, darkMode: document.getElementById('darkMode').checked }, autoBirthdayWish: document.getElementById('autoBirthday').checked, autoAnniversaryWish: document.getElementById('autoAnniversary').checked };
+  throw new Error('Unknown settings section.');
+}
 
-  let payload = {};
+function settingsForm(section) {
+  return {
+    company: '#companyForm',
+    smtp: '#smtpForm',
+    whatsapp: '#whatsappForm',
+    theme: '#themeForm'
+  }[section];
+}
 
-  if (section === 'company') payload = { company: { name: document.getElementById('compName').value, email: document.getElementById('compEmail').value, phone: document.getElementById('compPhone').value, website: document.getElementById('compWebsite').value, address: document.getElementById('compAddress').value } };
+window.saveSettings = (button, section) => RMS.mutations.runMutation(button, () => RMS.api.put('/settings', settingsPayload(section)), {
+  form: settingsForm(section),
+  pending: 'Saving…',
+  success: 'Settings saved successfully'
+});
 
-  if (section === 'smtp') payload = { smtp: { host: document.getElementById('smtpHost').value, port: +document.getElementById('smtpPort').value, user: document.getElementById('smtpUser').value, password: document.getElementById('smtpPass').value, fromEmail: document.getElementById('smtpFrom').value, fromName: document.getElementById('smtpFromName').value } };
-
-  if (section === 'whatsapp') payload = { whatsapp: { apiUrl: document.getElementById('waUrl').value, apiKey: document.getElementById('waKey').value, phoneNumberId: document.getElementById('waPhoneId').value, businessAccountId: document.getElementById('waBusinessId').value } };
-
-  if (section === 'theme') payload = { theme: { primaryColor: document.getElementById('themeColor').value, darkMode: document.getElementById('darkMode').checked }, autoBirthdayWish: document.getElementById('autoBirthday').checked, autoAnniversaryWish: document.getElementById('autoAnniversary').checked };
-
-  await RMS.api.put('/settings', payload);
-
-  RMS.toast.show('Settings saved successfully');
-
-};
-
-
-
-window.testSmtp = async () => {
-
-  await saveSettings('smtp');
-
-  const res = await RMS.api.post('/delivery/test-email', { to: document.getElementById('smtpFrom').value });
-
-  if (res?.success) RMS.toast.show('Test email sent successfully', 'success');
-
-  else RMS.toast.show(res?.message || 'Test failed', 'error');
-
-};
+window.testSmtp = (button) => RMS.mutations.runMutation(button, async () => {
+  await RMS.api.put('/settings', settingsPayload('smtp'));
+  return RMS.api.post('/delivery/test-email', { to: document.getElementById('smtpFrom').value });
+}, {
+  form: '#smtpForm',
+  pending: 'Testing…',
+  success: 'Test email sent successfully'
+});
 
 } // end admin-only settings

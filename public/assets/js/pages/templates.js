@@ -25,7 +25,7 @@ document.getElementById('pageBody').innerHTML = `
         <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" id="tmplDefault"><label class="form-check-label">Set as default for this type</label></div></div>
       </div>
     </form></div>
-    <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" onclick="saveTemplate()">Save Template</button></div>
+    <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" onclick="saveTemplate(this)">Save Template</button></div>
   </div></div></div>`;
 
 const TYPES = ['all','birthday','anniversary','festival','invitation','email','whatsapp'];
@@ -53,11 +53,22 @@ function renderTemplates() {
 window.filterType = (t) => { activeType = t; document.querySelectorAll('#typeTabs .nav-link').forEach((el,i) => el.classList.toggle('active', TYPES[i]===t)); renderTemplates(); };
 window.openTemplateModal = () => { document.getElementById('templateForm').reset(); document.getElementById('templateId').value=''; };
 window.insertVar = (v) => { const body = document.getElementById('tmplBody'); if(body){ body.value += `{{${v}}}`; body.focus(); } else RMS.toast.show(`Variable {{${v}}} copied`,'info'); };
-window.saveTemplate = async () => {
+window.saveTemplate = async (button) => {
   const data = { name: document.getElementById('tmplName').value, type: document.getElementById('tmplType').value, subject: document.getElementById('tmplSubject').value, body: document.getElementById('tmplBody').value, isDefault: document.getElementById('tmplDefault').checked, variables: ['Name','City','Sector','Company','Designation','Occupation'] };
+  if (!data.name.trim()) return RMS.mutations.showValidationError('#templateForm', 'Template name is required', '#tmplName');
+  if (!data.body.trim()) return RMS.mutations.showValidationError('#templateForm', 'Template body is required', '#tmplBody');
   const id = document.getElementById('templateId').value;
-  const res = id ? await RMS.api.put(`/templates/${id}`, data) : await RMS.api.post('/templates', data);
-  if (res?.success) { RMS.toast.show('Template saved'); bootstrap.Modal.getInstance(document.getElementById('templateModal')).hide(); loadTemplates(); }
+  const result = await RMS.mutations.runMutation(button, () => id
+    ? RMS.api.put(`/templates/${id}`, data)
+    : RMS.api.post('/templates', data), {
+    form: '#templateForm',
+    pending: 'Saving…',
+    success: 'Template saved'
+  });
+  if (result.ok) {
+    bootstrap.Modal.getInstance(document.getElementById('templateModal')).hide();
+    await loadTemplates();
+  }
 };
 window.editTemplate = (id) => {
   const t = allTemplates.find(x=>x._id===id); if(!t) return;
@@ -69,4 +80,11 @@ window.editTemplate = (id) => {
   document.getElementById('tmplDefault').checked = t.isDefault;
   new bootstrap.Modal(document.getElementById('templateModal')).show();
 };
-window.deleteTemplate = (id) => RMS.components.confirmDelete(null, async () => { await RMS.api.delete(`/templates/${id}`); loadTemplates(); });
+window.deleteTemplate = (id) => RMS.components.confirmDelete(null, (button) => RMS.mutations.runMutation(button, async () => {
+  await RMS.api.delete(`/templates/${id}`);
+  await loadTemplates();
+}, {
+  pending: 'Deleting…',
+  success: 'Template deleted',
+  errorTarget: '#rmsConfirmStatus'
+}));

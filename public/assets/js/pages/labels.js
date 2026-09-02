@@ -27,12 +27,13 @@ let previewContact = null;
 let searchResultCache = [];
 
 document.getElementById('pageActions').innerHTML = `
-  <button class="btn btn-outline-secondary" onclick="saveLabelFormat()"><i class="bi bi-save me-1"></i> Save Format</button>
+  <button class="btn btn-outline-secondary" onclick="saveLabelFormat(this)"><i class="bi bi-save me-1"></i> Save Format</button>
   <button class="btn btn-outline-primary" onclick="downloadLabelsPdf()" id="downloadPdfBtn" disabled><i class="bi bi-file-earmark-pdf me-1"></i> Download PDF</button>
   <button class="btn btn-outline-primary" onclick="downloadLabelsHtml()" id="downloadHtmlBtn" disabled><i class="bi bi-download me-1"></i> Download HTML</button>
   <button class="btn btn-primary" onclick="printLabels()" id="printBtn" disabled><i class="bi bi-printer me-1"></i> Print</button>`;
 
 document.getElementById('pageBody').innerHTML = `
+  <div class="alert py-2 small d-none" id="labelMutationStatus"></div>
   <div class="row g-4">
     <div class="col-lg-4">
       <div class="card label-format-panel">
@@ -534,7 +535,7 @@ window.loadGroupContacts = async () => {
   document.getElementById('groupFilter').value = '';
 };
 
-window.saveLabelFormat = async () => {
+window.saveLabelFormat = async (button) => {
   const { width, height } = getLabelDimensions();
   const payload = {
     labels: {
@@ -550,8 +551,11 @@ window.saveLabelFormat = async () => {
       height
     }
   };
-  await RMS.api.put('/settings', payload);
-  RMS.toast.show('Label format saved');
+  await RMS.mutations.runMutation(button, () => RMS.api.put('/settings', payload), {
+    errorTarget: '#labelMutationStatus',
+    pending: 'Saving…',
+    success: 'Label format saved'
+  });
 };
 
 window.printLabels = () => {

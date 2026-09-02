@@ -32,7 +32,6 @@ test('contact edit action loads persisted data into the editor', async ({ rms })
 });
 
 test('failed contact deletion never reports success', async ({ rms }) => {
-  test.fail(true, 'Known false-success defect scheduled for Frontend Task 2');
   rms.api.fail('DELETE', `/api/contacts/${data.ids.contact}`, 500, 'Delete failed');
   await rms.page.goto('/pages/contacts.html');
 
@@ -41,7 +40,25 @@ test('failed contact deletion never reports success', async ({ rms }) => {
   await row.locator('button').nth(1).click();
   await rms.page.locator('#rmsConfirmBtn').click();
 
-  await expect(rms.page.locator('.toast-rms')).not.toContainText('Contact deleted');
+  await expect(rms.page.getByText('Contact deleted', { exact: true })).toHaveCount(0);
+  await expect(rms.page.getByRole('alert')).toContainText('Delete failed');
+  await expect(rms.page.locator('#rmsConfirmModal')).toHaveClass(/show/);
+
+  rms.api.failures.delete(`DELETE /api/contacts/${data.ids.contact}`);
+  await rms.page.locator('#rmsConfirmBtn').click();
+  await expect.poll(() => rms.api.requests.filter(request => request.method === 'DELETE' && request.pathname === `/api/contacts/${data.ids.contact}`).length).toBe(2);
+  await expect(rms.page.locator('#rmsConfirmModal')).not.toHaveClass(/show/);
+});
+
+test('contact validation is inline and focuses the first invalid field', async ({ rms }) => {
+  await rms.page.goto('/pages/contacts.html');
+  await rms.page.getByRole('button', { name: 'Add Contact' }).click();
+  await rms.page.getByRole('button', { name: 'Save Contact' }).click();
+
+  await expect(rms.page.locator('#firstName')).toHaveAttribute('aria-invalid', 'true');
+  await expect(rms.page.locator('#firstName')).toBeFocused();
+  await expect(rms.page.locator('#contactForm').getByRole('alert')).toContainText('First and last name are required');
+  expect(rms.api.requests.filter(request => request.method === 'POST' && request.pathname === '/api/contacts')).toHaveLength(0);
 });
 
 test('campaign scheduling creates a campaign and a delivery job', async ({ rms }) => {

@@ -16,7 +16,7 @@ document.getElementById('pageBody').innerHTML = `
         <div class="col-12"><label class="form-label">Schedule Send</label><input type="datetime-local" class="form-control" id="festSchedule"></div>
       </div>
     </form></div>
-    <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" onclick="saveFestival()">Save</button><button class="btn btn-success" onclick="sendFestival()"><i class="bi bi-send"></i> Send</button></div>
+    <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" onclick="saveFestival(this)">Save</button><button class="btn btn-success" onclick="sendFestival(this)"><i class="bi bi-send"></i> Send</button></div>
   </div></div></div>`;
 
 let allFestivals = [];
@@ -36,12 +36,13 @@ async function loadFestivals() {
       </div>
       <div class="card-footer bg-transparent d-flex gap-2">
         <button class="btn btn-sm btn-outline-primary flex-grow-1" onclick="editFestival('${f._id}')"><i class="bi bi-pencil"></i> Edit</button>
-        <button class="btn btn-sm btn-success" onclick="sendFestivalById('${f._id}')"><i class="bi bi-send"></i></button>
+        <button class="btn btn-sm btn-success" onclick="sendFestivalById('${f._id}', this)"><i class="bi bi-send"></i></button>
         <button class="btn btn-sm btn-outline-danger" onclick="deleteFestival('${f._id}')"><i class="bi bi-trash"></i></button>
       </div>
     </div></div>`).join('');
 }
 window.openFestivalModal = () => {
+  RMS.mutations.clearFormErrors(document.getElementById('festivalForm'));
   document.getElementById('festivalForm').reset();
   document.getElementById('festivalId').value = '';
   document.getElementById('festivalModalTitle').textContent = 'Add Festival';
@@ -85,29 +86,14 @@ window.editFestival = async (id) => {
   new bootstrap.Modal(document.getElementById('festivalModal')).show();
 };
 
-window.sendFestival = async () => {
-  const saved = await saveFestival(true);
-  if (!saved) return;
-  await queueFestivalDelivery(saved);
-};
-
-window.sendFestivalById = async (id) => {
-  let festival = allFestivals.find(f => f._id === id);
-  if (!festival) {
-    const res = await RMS.api.get(`/festivals/${id}`);
-    festival = res?.data;
-  }
-  if (!festival) return RMS.toast.show('Festival not found', 'error');
-  await queueFestivalDelivery(festival);
-};
-
-async function queueFestivalDelivery(festival) {
+async function queueFestivalDeliveryRaw(festival, setPhase = () => {}) {
   const filters = {
     cities: festival.recipients?.cities || [],
     sectors: festival.recipients?.sectors || [],
     religions: festival.recipients?.religions || (festival.religion ? [festival.religion] : [])
   };
-  const job = await RMS.utils.queueDeliveryJob({
+  setPhase('queueing');
+  const jobRes = await RMS.api.post('/delivery/jobs', {
     name: `Festival: ${festival.name}`,
     type: 'festival',
     channel: 'both',
@@ -115,22 +101,22 @@ async function queueFestivalDelivery(festival) {
     body: festival.message || `Warm wishes on ${festival.name}, {{Name}}!`,
     filters
   });
-  if (job) {
-    await RMS.api.put(`/festivals/${festival._id}`, { status: 'scheduled', sentCount: job.stats?.total || 0 });
-    loadFestivals();
-  }
+  setPhase('updating-status');
+  await RMS.api.put(`/festivals/${festival._id}`, { status: 'scheduled', sentCount: jobRes.data?.stats?.total || 0 });
+  return jobRes.data;
 }
 
-window.saveFestival = async (silent) => {
+function validateFestival() {
   const name = document.getElementById('festName').value.trim();
-  if (!name) {
-    RMS.toast.show('Festival name is required', 'warning');
-    return null;
-  }
+  if (name) return true;
+  return RMS.mutations.showValidationError('#festivalForm', 'Festival name is required', '#festName');
+}
 
+function festivalFormData() {
+  const name = document.getElementById('festName').value.trim();
   const citySelect = document.getElementById('festCity');
   const sectorSelect = document.getElementById('festSector');
-  const data = {
+  return {
     name,
     date: document.getElementById('festDate').value,
     religion: document.getElementById('festReligion').value,
@@ -144,25 +130,77 @@ window.saveFestival = async (silent) => {
       groups: []
     }
   };
+}
 
+async function persistFestival() {
   const id = document.getElementById('festivalId').value;
+  const data = festivalFormData();
   const res = id
     ? await RMS.api.put(`/festivals/${id}`, data)
     : await RMS.api.post('/festivals', data);
+  return res.data;
+}
 
-  if (res?.success) {
-    if (!silent) RMS.toast.show(id ? 'Festival updated' : 'Festival created');
-    if (!silent) bootstrap.Modal.getInstance(document.getElementById('festivalModal')).hide();
-    loadFestivals();
-    return res.data;
-  } else {
-    RMS.toast.show(res?.message || 'Failed to save festival', 'error');
-    return null;
-  }
+window.saveFestival = async (button) => {
+  if (!validateFestival()) return;
+  const isUpdate = Boolean(document.getElementById('festivalId').value);
+  const result = await RMS.mutations.runMutation(button, persistFestival, {
+    form: '#festivalForm',
+    pending: 'Saving…',
+    success: isUpdate ? 'Festival updated' : 'Festival created'
+  });
+  if (!result.ok) return;
+  bootstrap.Modal.getInstance(document.getElementById('festivalModal')).hide();
+  await loadFestivals();
 };
 
-window.deleteFestival = (id) => RMS.components.confirmDelete('Delete this festival?', async () => {
-  await RMS.api.delete(`/festivals/${id}`);
-  RMS.toast.show('Festival deleted');
-  loadFestivals();
+window.sendFestival = async (button) => {
+  if (!validateFestival()) return;
+  let phase = 'saving';
+  const result = await RMS.mutations.runMutation(button, async () => {
+    const festival = await persistFestival();
+    return queueFestivalDeliveryRaw(festival, nextPhase => { phase = nextPhase; });
+  }, {
+    form: '#festivalForm',
+    pending: 'Sending…',
+    success: 'Festival message queued for delivery',
+    error: (error) => {
+      if (phase === 'queueing') return `Festival saved, but delivery queue failed: ${error.message}`;
+      if (phase === 'updating-status') return `Delivery was queued, but festival status could not be updated: ${error.message}`;
+      return error.message;
+    }
+  });
+  if (!result.ok) return;
+  bootstrap.Modal.getInstance(document.getElementById('festivalModal')).hide();
+  await loadFestivals();
+};
+
+window.sendFestivalById = async (id, button) => {
+  let phase = 'loading';
+  const result = await RMS.mutations.runMutation(button, async () => {
+    let festival = allFestivals.find(f => f._id === id);
+    if (!festival) {
+      const res = await RMS.api.get(`/festivals/${id}`);
+      festival = res?.data;
+    }
+    if (!festival) throw new Error('Festival not found');
+    return queueFestivalDeliveryRaw(festival, nextPhase => { phase = nextPhase; });
+  }, {
+    pending: 'Sending…',
+    success: 'Festival message queued for delivery',
+    error: (error) => phase === 'updating-status'
+      ? `Delivery was queued, but festival status could not be updated: ${error.message}`
+      : error.message
+  });
+  if (result.ok) await loadFestivals();
+};
+
+window.deleteFestival = (id) => RMS.components.confirmDelete('Delete this festival?', async (button) => {
+  const result = await RMS.mutations.runMutation(button, () => RMS.api.delete(`/festivals/${id}`), {
+    errorTarget: '#rmsConfirmStatus',
+    pending: 'Deleting…',
+    success: 'Festival deleted'
+  });
+  if (result.ok) await loadFestivals();
+  return result;
 });

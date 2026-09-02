@@ -18,7 +18,7 @@ document.getElementById('pageBody').innerHTML = `
         <div class="col-md-6"><label class="form-label">Schedule</label><input type="datetime-local" class="form-control" id="eventSchedule"></div>
       </div>
     </form></div>
-    <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-outline-primary" onclick="previewEvent()"><i class="bi bi-eye"></i> Preview</button><button class="btn btn-primary" onclick="saveEvent()">Save</button><button class="btn btn-success" onclick="sendEvent()"><i class="bi bi-send"></i> Send</button></div>
+    <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-outline-primary" onclick="previewEvent()"><i class="bi bi-eye"></i> Preview</button><button class="btn btn-primary" onclick="saveEvent(this)">Save</button><button class="btn btn-success" onclick="sendEvent(this)"><i class="bi bi-send"></i> Send</button></div>
   </div></div></div>
   <div class="modal fade" id="previewModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
     <div class="modal-header"><h5 class="modal-title">Invitation Preview</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
@@ -43,12 +43,13 @@ async function loadEvents() {
       <div class="card-footer bg-transparent d-flex gap-1">
         <button class="btn btn-sm btn-outline-primary flex-grow-1" onclick="editEvent('${e._id}')"><i class="bi bi-pencil"></i> Edit</button>
         <button class="btn btn-sm btn-outline-secondary" onclick="previewEventData('${e._id}')"><i class="bi bi-eye"></i></button>
-        <button class="btn btn-sm btn-success" onclick="sendEventById('${e._id}')"><i class="bi bi-send"></i></button>
+        <button class="btn btn-sm btn-success" onclick="sendEventById('${e._id}', this)"><i class="bi bi-send"></i></button>
         <button class="btn btn-sm btn-outline-danger" onclick="deleteEvent('${e._id}')"><i class="bi bi-trash"></i></button>
       </div>
     </div></div>`).join('');
 }
 window.openEventModal = () => {
+  RMS.mutations.clearFormErrors(document.getElementById('eventForm'));
   document.getElementById('eventForm').reset();
   document.getElementById('eventId').value = '';
   document.getElementById('eventModalTitle').textContent = 'Create Event / Invitation';
@@ -85,16 +86,11 @@ window.editEvent = async (id) => {
   new bootstrap.Modal(document.getElementById('eventModal')).show();
 };
 
-window.saveEvent = async (silent) => {
+function eventFormData() {
   const title = document.getElementById('eventTitle').value.trim();
-  if (!title) {
-    RMS.toast.show('Title is required', 'warning');
-    return;
-  }
-
   const id = document.getElementById('eventId').value;
   const existing = id ? allEvents.find(e => e._id === id) : null;
-  const data = {
+  return {
     title,
     description: document.getElementById('eventDesc').value,
     venue: document.getElementById('eventVenue').value,
@@ -107,37 +103,81 @@ window.saveEvent = async (silent) => {
     recipients: existing?.recipients || { contacts: [], groups: [], cities: [], sectors: [] },
     deliveryStats: existing?.deliveryStats
   };
+}
 
+async function persistEvent() {
+  const id = document.getElementById('eventId').value;
+  const data = eventFormData();
   const res = id
     ? await RMS.api.put(`/events/${id}`, data)
     : await RMS.api.post('/events', data);
+  return res.data;
+}
 
-  if (res?.success) {
-    if (!silent) RMS.toast.show(id ? 'Invitation updated' : 'Invitation created');
-    if (!silent) bootstrap.Modal.getInstance(document.getElementById('eventModal')).hide();
-    loadEvents();
-    return res.data;
-  }
-  return null;
+function validateEvent() {
+  if (document.getElementById('eventTitle').value.trim()) return true;
+  return RMS.mutations.showValidationError('#eventForm', 'Title is required', '#eventTitle');
+}
+
+window.saveEvent = async (button) => {
+  if (!validateEvent()) return;
+  const isUpdate = Boolean(document.getElementById('eventId').value);
+  const result = await RMS.mutations.runMutation(button, persistEvent, {
+    form: '#eventForm',
+    pending: 'Saving…',
+    success: isUpdate ? 'Invitation updated' : 'Invitation created'
+  });
+
+  if (!result.ok) return;
+  bootstrap.Modal.getInstance(document.getElementById('eventModal')).hide();
+  await loadEvents();
 };
 
-window.sendEvent = async () => {
-  const saved = await saveEvent(true);
-  if (!saved) return;
-  await queueEventDelivery(saved);
+window.sendEvent = async (button) => {
+  if (!validateEvent()) return;
+  let phase = 'saving';
+  const result = await RMS.mutations.runMutation(button, async () => {
+    const saved = await persistEvent();
+    const job = await queueEventDeliveryRaw(saved, nextPhase => { phase = nextPhase; });
+    phase = 'complete';
+    return job;
+  }, {
+    form: '#eventForm',
+    pending: 'Sending…',
+    success: 'Invitation queued for delivery',
+    error: (error) => {
+      if (phase === 'queueing') return `Invitation saved, but delivery queue failed: ${error.message}`;
+      if (phase === 'updating-status') return `Delivery was queued, but invitation status could not be updated: ${error.message}`;
+      return error.message;
+    }
+  });
+
+  if (!result.ok) return;
+  bootstrap.Modal.getInstance(document.getElementById('eventModal')).hide();
+  await loadEvents();
 };
 
-window.sendEventById = async (id) => {
-  let event = allEvents.find(e => e._id === id);
-  if (!event) {
-    const res = await RMS.api.get(`/events/${id}`);
-    event = res?.data;
-  }
-  if (!event) return RMS.toast.show('Invitation not found', 'error');
-  await queueEventDelivery(event);
+window.sendEventById = async (id, button) => {
+  let phase = 'loading';
+  const result = await RMS.mutations.runMutation(button, async () => {
+    let event = allEvents.find(e => e._id === id);
+    if (!event) {
+      const res = await RMS.api.get(`/events/${id}`);
+      event = res?.data;
+    }
+    if (!event) throw new Error('Invitation not found');
+    return queueEventDeliveryRaw(event, nextPhase => { phase = nextPhase; });
+  }, {
+    pending: 'Sending…',
+    success: 'Invitation queued for delivery',
+    error: (error) => phase === 'updating-status'
+      ? `Delivery was queued, but invitation status could not be updated: ${error.message}`
+      : error.message
+  });
+  if (result.ok) await loadEvents();
 };
 
-async function queueEventDelivery(event) {
+async function queueEventDeliveryRaw(event, setPhase = () => {}) {
   const body = [
     `You're invited: ${event.title}`,
     event.description || '',
@@ -166,11 +206,11 @@ async function queueEventDelivery(event) {
     }
   }
 
-  const job = await RMS.utils.queueDeliveryJob(payload);
-  if (job) {
-    await RMS.api.put(`/events/${event._id}`, { status: 'scheduled' });
-    loadEvents();
-  }
+  setPhase('queueing');
+  const jobRes = await RMS.api.post('/delivery/jobs', payload);
+  setPhase('updating-status');
+  await RMS.api.put(`/events/${event._id}`, { status: 'scheduled' });
+  return jobRes.data;
 };
 
 window.previewEvent = () => {
@@ -183,4 +223,12 @@ window.previewEventData = async (id) => {
   document.getElementById('previewBody').innerHTML = `<div class="text-center p-4 border rounded"><h4>${e.title}</h4><p>${e.description||''}</p><p>${e.venue}</p><p>${RMS.utils.formatDate(e.date)} ${e.time||''}</p></div>`;
   new bootstrap.Modal(document.getElementById('previewModal')).show();
 };
-window.deleteEvent = (id) => RMS.components.confirmDelete(null, async () => { await RMS.api.delete(`/events/${id}`); loadEvents(); });
+window.deleteEvent = (id) => RMS.components.confirmDelete(null, async (button) => {
+  const result = await RMS.mutations.runMutation(button, () => RMS.api.delete(`/events/${id}`), {
+    errorTarget: '#rmsConfirmStatus',
+    pending: 'Deleting…',
+    success: 'Invitation deleted'
+  });
+  if (result.ok) await loadEvents();
+  return result;
+});

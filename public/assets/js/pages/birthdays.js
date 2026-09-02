@@ -30,12 +30,12 @@ document.getElementById('pageBody').innerHTML = `
   </div>
   <div class="modal fade" id="wishModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
     <div class="modal-header gradient"><h5 class="modal-title">Send Birthday Wish</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
-    <div class="modal-body">
+    <div class="modal-body" id="birthdayWishForm">
       <div class="mb-3"><label class="form-label">Channel</label><select class="form-select" id="wishChannel"><option value="email">Email</option><option value="whatsapp">WhatsApp</option><option value="both">Both</option></select></div>
       <div class="mb-3"><label class="form-label">Template</label><select class="form-select" id="wishTemplate"></select></div>
       <div class="mb-3"><label class="form-label">Schedule</label><input type="datetime-local" class="form-control" id="wishSchedule"></div>
     </div>
-    <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" onclick="sendWish()">Send Now</button></div>
+    <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" onclick="sendWish(this)">Send Now</button></div>
   </div></div></div>`;
 
 let allContacts = [], calDate = new Date(), birthdayTemplates = [], todayBirthdays = [];
@@ -56,7 +56,7 @@ async function init() {
   document.getElementById('todayGrid').innerHTML = today.length ? today.map(c => birthdayCard(c)).join('') : '<div class="col-12"><div class="empty-state"><i class="bi bi-cake2 d-block"></i>No birthdays today</div></div>';
   document.querySelector('#upcomingTable tbody').innerHTML = upcoming.map(c => {
     const days = daysUntil(c.dob);
-    return `<tr><td><div class="d-flex align-items-center gap-2"><div class="avatar">${RMS.utils.getInitials(c.firstName,c.lastName)}</div>${c.firstName} ${c.lastName}</div></td><td>${c.designation || '-'}</td><td>${RMS.utils.formatDate(c.dob)}</td><td>${c.city || '-'}</td><td><span class="badge bg-primary">${days} days</span></td><td><button class="btn btn-sm btn-primary" onclick="sendBirthdayWish('${c._id}')"><i class="bi bi-send"></i></button></td></tr>`;
+    return `<tr><td><div class="d-flex align-items-center gap-2"><div class="avatar">${RMS.utils.getInitials(c.firstName,c.lastName)}</div>${c.firstName} ${c.lastName}</div></td><td>${c.designation || '-'}</td><td>${RMS.utils.formatDate(c.dob)}</td><td>${c.city || '-'}</td><td><span class="badge bg-primary">${days} days</span></td><td><button class="btn btn-sm btn-primary" onclick="sendBirthdayWish('${c._id}', undefined, this)"><i class="bi bi-send"></i></button></td></tr>`;
   }).join('') || '<tr><td colspan="6" class="text-center text-secondary">No upcoming birthdays</td></tr>';
 
   const templates = (tmplRes?.data || []).filter(t => t.type === 'birthday');
@@ -90,8 +90,8 @@ function birthdayCard(c) {
     <div class="avatar avatar-lg mx-auto mb-3" style="background:${RMS.utils.getAvatarColor(c.firstName)}">${RMS.utils.getInitials(c.firstName,c.lastName)}</div>
     <h5>${c.firstName} ${c.lastName}</h5><p class="text-secondary small">${RMS.utils.formatContactSubtitle(c)} · ${c.city || ''}</p>
     <div class="d-flex gap-2 justify-content-center mt-3">
-      <button class="btn btn-primary btn-sm" onclick="sendBirthdayWish('${c._id}', 'email')"><i class="bi bi-envelope"></i> Email</button>
-      <button class="btn btn-success btn-sm" onclick="sendBirthdayWish('${c._id}', 'whatsapp')"><i class="bi bi-whatsapp"></i> WhatsApp</button>
+      <button class="btn btn-primary btn-sm" onclick="sendBirthdayWish('${c._id}', 'email', this)"><i class="bi bi-envelope"></i> Email</button>
+      <button class="btn btn-success btn-sm" onclick="sendBirthdayWish('${c._id}', 'whatsapp', this)"><i class="bi bi-whatsapp"></i> WhatsApp</button>
     </div></div></div></div>`;
 }
 function daysUntil(dob) {
@@ -152,7 +152,7 @@ function renderCalendar() {
                  <div class="fw-semibold small">${c.firstName} ${c.lastName}</div>
                  <div class="text-secondary" style="font-size:.75rem">${RMS.utils.formatDate(c.dob)} · ${RMS.utils.formatContactSubtitle(c)}</div>
                </div>
-               <button class="btn btn-sm btn-outline-primary" onclick="sendBirthdayWish('${c._id}')"><i class="bi bi-send"></i></button>
+               <button class="btn btn-sm btn-outline-primary" onclick="sendBirthdayWish('${c._id}', undefined, this)"><i class="bi bi-send"></i></button>
              </div>
            </div>`).join('')}</div>`
       : `<div class="empty-state py-3"><i class="bi bi-calendar-x d-block"></i>No birthdays in ${monthLabel.textContent}</div>`;
@@ -166,7 +166,7 @@ window.showDayBirthdays = (day) => {
   const names = list.map(c => `${c.firstName} ${c.lastName}`).join(', ');
   RMS.toast.show(`Birthdays on ${calDate.toLocaleString('en', { month: 'short' })} ${day}: ${names}`, 'info');
 };
-window.sendBirthdayWish = async (contactId, channel) => {
+window.sendBirthdayWish = async (contactId, channel, button) => {
   const tmpl = birthdayTemplates.find(t => t.isDefault) || birthdayTemplates[0];
   await RMS.utils.queueDeliveryJob({
     name: `Birthday Wish — ${new Date().toLocaleDateString('en-IN')}`,
@@ -175,13 +175,12 @@ window.sendBirthdayWish = async (contactId, channel) => {
     subject: tmpl?.subject || 'Happy Birthday {{Name}}!',
     body: tmpl?.body || 'Dear {{Name}}, wishing you a wonderful birthday!',
     contactIds: [contactId]
-  });
+  }, { button, pendingMessage: 'Sending…' });
 };
-window.sendWish = async () => {
+window.sendWish = async (button) => {
   const contactIds = todayBirthdays.map(c => c._id);
   if (!contactIds.length) {
-    RMS.toast.show('No birthdays today to send wishes', 'warning');
-    return;
+    return RMS.mutations.showValidationError('#birthdayWishForm', 'No birthdays today to send wishes');
   }
   const templateId = document.getElementById('wishTemplate').value;
   const tmpl = birthdayTemplates.find(t => t._id === templateId) || birthdayTemplates[0];
@@ -192,6 +191,6 @@ window.sendWish = async () => {
     subject: tmpl?.subject || 'Happy Birthday {{Name}}!',
     body: tmpl?.body || 'Dear {{Name}}, wishing you a wonderful birthday!',
     contactIds
-  });
+  }, { button, form: '#birthdayWishForm', pendingMessage: 'Sending…' });
   if (job) bootstrap.Modal.getInstance(document.getElementById('wishModal')).hide();
 };

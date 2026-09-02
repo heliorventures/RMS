@@ -31,10 +31,11 @@ document.getElementById('pageBody').innerHTML = `
             <small class="text-secondary" id="jobMeta"></small>
           </div>
           <div class="d-flex gap-2">
-            <button class="btn btn-sm btn-outline-primary" id="retryBtn" onclick="retryFailed()"><i class="bi bi-arrow-repeat"></i> Retry Failed</button>
+            <button class="btn btn-sm btn-outline-primary" id="retryBtn" onclick="retryFailed(this)"><i class="bi bi-arrow-repeat"></i> Retry Failed</button>
           </div>
         </div>
         <div class="card-body">
+          <div class="alert py-2 small d-none" id="retryStatus"></div>
           <div class="row g-2 mb-3" id="jobStats"></div>
           <div class="progress mb-2" style="height:10px">
             <div class="progress-bar bg-success" id="progDelivered" style="width:0%"></div>
@@ -157,15 +158,22 @@ async function loadJobMessages() {
     : '<tr><td colspan="6" class="text-center text-secondary py-3">No messages</td></tr>';
 }
 
-window.retryFailed = async () => {
+window.retryFailed = async (button) => {
   if (!activeJobId) return;
-  const res = await RMS.api.post(`/delivery/jobs/${activeJobId}/retry-failed`, {});
-  if (res?.success) {
-    RMS.toast.show(res.message || 'Failed messages requeued');
-    await refreshJobDetail(activeJobId);
-    loadJobMessages();
-    loadJobs();
-  }
+  const result = await RMS.mutations.runMutation(
+    button,
+    () => RMS.api.post(`/delivery/jobs/${activeJobId}/retry-failed`, {}),
+    {
+      statusTarget: '#retryStatus',
+      errorTarget: '#retryStatus',
+      pending: 'Retrying…',
+      success: (res) => res.message || 'Failed messages requeued'
+    }
+  );
+  if (!result.ok) return;
+  await refreshJobDetail(activeJobId);
+  loadJobMessages();
+  loadJobs();
 };
 
 function startPolling() {

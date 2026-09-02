@@ -67,7 +67,7 @@
           <h5 class="modal-title">Forgot Password</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body" id="forgotForm">
           <p class="text-secondary">Enter your email and we'll send you a reset link.</p>
           <input type="email" class="form-control" id="forgotEmail" placeholder="Email address">
         </div>
@@ -83,6 +83,7 @@
   <script src="/assets/js/utils.js"></script>
   <script src="/assets/js/auth.js"></script>
   <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/mutations.js"></script>
   <script>
     if (RMS.auth.getToken() === 'undefined') {
       localStorage.removeItem('rms_token');
@@ -99,43 +100,39 @@
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = document.getElementById('loginBtn');
-      const errEl = document.getElementById('loginError');
-      errEl.classList.add('d-none');
-      document.getElementById('loginText').classList.add('d-none');
-      document.getElementById('loginSpinner').classList.remove('d-none');
-      btn.disabled = true;
-      try {
+      const result = await RMS.mutations.runMutation(btn, async () => {
         const res = await RMS.api.post('/auth/login', {
           email: document.getElementById('email').value.trim(),
           password: document.getElementById('password').value,
           rememberMe: document.getElementById('rememberMe').checked
         });
-        if (res?.success && res.token) {
-          if (!RMS.auth.setSession(res.token, res.user)) {
-            throw new Error('Could not save session. Please try again.');
-          }
-          RMS.toast.show('Welcome back!', 'success');
-          window.location.href = 'pages/dashboard.html';
-          return;
+        if (!res.token) throw new Error('Login response did not include a session token.');
+        if (!RMS.auth.setSession(res.token, res.user)) {
+          throw new Error('Could not save session. Please try again.');
         }
-        throw new Error(res?.message || 'Login failed.');
-      } catch (err) {
-        errEl.textContent = err.message || 'Invalid credentials';
-        errEl.classList.remove('d-none');
-        RMS.toast.show(err.message || 'Invalid credentials', 'error');
-      } finally {
-        document.getElementById('loginText').classList.remove('d-none');
-        document.getElementById('loginSpinner').classList.add('d-none');
-        btn.disabled = false;
-      }
+        return res;
+      }, {
+        errorTarget: '#loginError',
+        pending: 'Signing in…',
+        success: 'Welcome back!'
+      });
+      if (result.ok) window.location.href = 'pages/dashboard.html';
     });
 
-    document.getElementById('forgotBtn').addEventListener('click', async () => {
-      const email = document.getElementById('forgotEmail').value;
-      if (!email) return RMS.toast.show('Please enter your email', 'warning');
-      await RMS.api.post('/auth/forgot-password', { email });
-      RMS.toast.show('Reset link sent if account exists', 'success');
-      bootstrap.Modal.getInstance(document.getElementById('forgotModal')).hide();
+    document.getElementById('forgotBtn').addEventListener('click', async (event) => {
+      const email = document.getElementById('forgotEmail').value.trim();
+      if (!email) return RMS.mutations.showValidationError('#forgotForm', 'Please enter your email', '#forgotEmail');
+
+      const result = await RMS.mutations.runMutation(
+        event.currentTarget,
+        () => RMS.api.post('/auth/forgot-password', { email }),
+        {
+          form: '#forgotForm',
+          pending: 'Sending…',
+          success: 'Reset link sent if account exists'
+        }
+      );
+      if (result.ok) bootstrap.Modal.getInstance(document.getElementById('forgotModal')).hide();
     });
   </script>
 </body>

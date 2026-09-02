@@ -42,7 +42,7 @@ document.getElementById('pageBody').innerHTML = `
           <h5 class="modal-title"><i class="bi bi-upload me-2"></i>Bulk Upload Contacts</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body" id="bulkUploadForm">
           <ol class="small text-secondary mb-3">
             <li>Download the <a href="/assets/templates/contacts-import-template.csv" download>CSV template</a></li>
             <li>Fill in contact details (First Name and Last Name are required)</li>
@@ -66,7 +66,7 @@ document.getElementById('pageBody').innerHTML = `
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-          <button class="btn btn-primary" id="bulkUploadBtn" onclick="startBulkUpload()">
+          <button class="btn btn-primary" id="bulkUploadBtn" onclick="startBulkUpload(this)">
             <i class="bi bi-cloud-upload me-1"></i> Upload Contacts
           </button>
         </div>
@@ -105,7 +105,7 @@ document.getElementById('pageBody').innerHTML = `
             </div>
           </form>
         </div>
-        <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" onclick="saveContact()">Save Contact</button></div>
+        <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" onclick="saveContact(this)">Save Contact</button></div>
       </div>
     </div>
   </div>`;
@@ -222,7 +222,7 @@ window.editContact = async (id) => {
   new bootstrap.Modal(document.getElementById('contactModal')).show();
 };
 
-window.saveContact = async () => {
+window.saveContact = async (button) => {
   const id = document.getElementById('contactId').value;
   const data = {};
   ['firstName','lastName','gender','mobile','whatsapp','email','religion','sector','occupation','company','designation','city','state','pincode','address','status','notes','dob','anniversary'].forEach(f => {
@@ -231,22 +231,30 @@ window.saveContact = async () => {
   data.tags = document.getElementById('tags').value.split(',').map(t => t.trim()).filter(Boolean);
   data.country = 'India';
   if (!data.firstName?.trim() || !data.lastName?.trim()) {
-    RMS.toast.show('First and last name are required', 'warning');
-    return;
+    const field = !data.firstName?.trim() ? '#firstName' : '#lastName';
+    return RMS.mutations.showValidationError('#contactForm', 'First and last name are required', field);
   }
-  const res = id ? await RMS.api.put(`/contacts/${id}`, data) : await RMS.api.post('/contacts', data);
-  if (res?.success) {
-    RMS.toast.show(id ? 'Contact updated' : 'Contact created');
+  const result = await RMS.mutations.runMutation(button, () => id
+    ? RMS.api.put(`/contacts/${id}`, data)
+    : RMS.api.post('/contacts', data), {
+    form: '#contactForm',
+    pending: 'Saving…',
+    success: id ? 'Contact updated' : 'Contact created'
+  });
+  if (result.ok) {
     bootstrap.Modal.getInstance(document.getElementById('contactModal')).hide();
     reloadTable();
-  } else RMS.toast.show(res?.message || 'Save failed', 'error');
+  }
 };
 
-window.deleteContact = (id) => RMS.components.confirmDelete('Delete this contact?', async () => {
+window.deleteContact = (id) => RMS.components.confirmDelete('Delete this contact?', (button) => RMS.mutations.runMutation(button, async () => {
   await RMS.api.delete(`/contacts/${id}`);
-  RMS.toast.show('Contact deleted');
   reloadTable();
-});
+}, {
+  pending: 'Deleting…',
+  success: 'Contact deleted',
+  errorTarget: '#rmsConfirmStatus'
+}));
 
 window.applyFilters = () => {
   activeFilters = {
@@ -271,27 +279,22 @@ window.exportContacts = async () => {
   RMS.toast.show(`Exported ${rows.length.toLocaleString()} contacts`);
 };
 
-window.startBulkUpload = async () => {
+window.startBulkUpload = async (button) => {
   const fileInput = document.getElementById('bulkCsvFile');
   const file = fileInput.files?.[0];
   if (!file) {
-    RMS.toast.show('Please select a CSV file', 'warning');
-    return;
+    return RMS.mutations.showValidationError('#bulkUploadForm', 'Please select a CSV file', '#bulkCsvFile');
   }
 
-  const btn = document.getElementById('bulkUploadBtn');
   const progressWrap = document.getElementById('bulkUploadProgress');
   const resultEl = document.getElementById('bulkUploadResult');
   progressWrap.classList.remove('d-none');
   resultEl.classList.add('d-none');
-  btn.disabled = true;
-
-  try {
+  const result = await RMS.mutations.runMutation(button, async () => {
     const text = await file.text();
     const rows = RMS.utils.parseCSV(text).map(RMS.utils.normalizeContactRow).filter(r => r.firstName && r.lastName);
     if (!rows.length) {
-      RMS.toast.show('No valid contacts found in file', 'error');
-      return;
+      throw new Error('No valid contacts found in file');
     }
 
     let imported = 0;
@@ -308,30 +311,25 @@ window.startBulkUpload = async () => {
       document.getElementById('bulkUploadDetail').textContent = `${imported.toLocaleString()} of ${total.toLocaleString()} contacts processed`;
 
       const res = await RMS.api.post('/contacts/bulk-import', { contacts: batch });
-      if (res?.success) {
-        imported += res.data?.inserted || batch.length;
-        skipped += res.data?.skipped || 0;
-      } else {
-        throw new Error(res?.message || 'Import failed');
-      }
+      imported += res.data?.inserted || batch.length;
+      skipped += res.data?.skipped || 0;
     }
+    return { imported, skipped };
+  }, {
+    form: '#bulkUploadForm',
+    statusTarget: '#bulkUploadResult',
+    errorTarget: '#bulkUploadResult',
+    pending: 'Uploading…',
+    success: ({ imported, skipped }) => `Successfully imported ${imported.toLocaleString()} contacts${skipped ? ` (${skipped} skipped)` : ''}.`
+  });
 
+  if (result.ok) {
+    const { imported } = result.value;
     document.getElementById('bulkUploadBar').classList.remove('progress-bar-animated');
     document.getElementById('bulkUploadStatus').textContent = 'Import complete';
     document.getElementById('bulkUploadDetail').textContent = `${imported.toLocaleString()} contacts imported successfully`;
-    resultEl.className = 'alert alert-success';
-    resultEl.textContent = `Successfully imported ${imported.toLocaleString()} contacts${skipped ? ` (${skipped} skipped)` : ''}.`;
-    resultEl.classList.remove('d-none');
-    RMS.toast.show(`Imported ${imported.toLocaleString()} contacts`, 'success');
     fileInput.value = '';
-    reloadTable();
-  } catch (err) {
-    resultEl.className = 'alert alert-danger';
-    resultEl.textContent = err.message || 'Upload failed';
-    resultEl.classList.remove('d-none');
-    RMS.toast.show(err.message || 'Upload failed', 'error');
-  } finally {
-    btn.disabled = false;
+    await reloadTable();
   }
 };
 

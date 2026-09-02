@@ -165,6 +165,7 @@ window.RMS.components = {
               <div class="rms-confirm-icon mb-3"><i class="bi bi-trash3-fill"></i></div>
               <h5 class="fw-bold mb-2" id="rmsConfirmTitle">Confirm Delete</h5>
               <p class="text-secondary mb-0" id="rmsConfirmMessage">Are you sure you want to delete this item? This action cannot be undone.</p>
+              <div class="alert py-2 small d-none mt-3 mb-0" id="rmsConfirmStatus"></div>
             </div>
             <div class="modal-footer border-0 justify-content-center gap-2 px-4 pb-4 pt-2">
               <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancel</button>
@@ -173,12 +174,16 @@ window.RMS.components = {
           </div>
         </div>
       </div>`);
-    document.getElementById('rmsConfirmBtn').addEventListener('click', () => {
+    document.getElementById('rmsConfirmBtn').addEventListener('click', async () => {
       const cb = window.RMS.components._confirmCallback;
-      window.RMS.components._confirmCallback = null;
       const modalEl = document.getElementById('rmsConfirmModal');
-      bootstrap.Modal.getInstance(modalEl)?.hide();
-      if (typeof cb === 'function') cb();
+      const button = document.getElementById('rmsConfirmBtn');
+      if (typeof cb !== 'function') return;
+      const result = await cb(button);
+      if (result?.ok !== false) {
+        window.RMS.components._confirmCallback = null;
+        bootstrap.Modal.getInstance(modalEl)?.hide();
+      }
     });
     document.getElementById('rmsConfirmModal').addEventListener('hidden.bs.modal', () => {
       window.RMS.components._confirmCallback = null;
@@ -191,6 +196,10 @@ window.RMS.components = {
     this._confirmCallback = opts.onConfirm || null;
     document.getElementById('rmsConfirmTitle').textContent = opts.title || 'Confirm Delete';
     document.getElementById('rmsConfirmMessage').textContent = opts.message || 'Are you sure you want to delete this item? This action cannot be undone.';
+    const status = document.getElementById('rmsConfirmStatus');
+    status.textContent = '';
+    status.classList.add('d-none');
+    status.removeAttribute('role');
     const btn = document.getElementById('rmsConfirmBtn');
     btn.innerHTML = opts.confirmHtml || '<i class="bi bi-trash me-1"></i>Delete';
     btn.className = opts.confirmClass || 'btn btn-danger px-4';

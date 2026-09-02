@@ -114,7 +114,7 @@ function mountGroupModals() {
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button class="btn btn-primary" onclick="saveGroup()"><i class="bi bi-check-lg me-1"></i>Save Group</button>
+            <button class="btn btn-primary" onclick="saveGroup(this)"><i class="bi bi-check-lg me-1"></i>Save Group</button>
           </div>
         </div>
       </div>
@@ -154,7 +154,7 @@ function mountGroupModals() {
           <div class="modal-footer">
             <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             <button class="btn btn-outline-primary" onclick="editGroupFromMembers()"><i class="bi bi-pencil me-1"></i>Edit Group</button>
-            <button class="btn btn-primary" id="saveMembersBtn" onclick="saveMembers()"><i class="bi bi-check-lg me-1"></i>Save Changes</button>
+            <button class="btn btn-primary" id="saveMembersBtn" onclick="saveMembers(this)"><i class="bi bi-check-lg me-1"></i>Save Changes</button>
           </div>
         </div>
       </div>
@@ -344,9 +344,9 @@ window.editGroupFromMembers = () => {
   setTimeout(() => editGroup(activeGroupId), 300);
 };
 
-window.saveGroup = async () => {
+window.saveGroup = async (button) => {
   const name = document.getElementById('groupName').value.trim();
-  if (!name) return RMS.toast.show('Group name is required', 'warning');
+  if (!name) return RMS.mutations.showValidationError('#groupForm', 'Group name is required', '#groupName');
 
   const type = document.getElementById('groupType').value;
   const data = {
@@ -368,18 +368,20 @@ window.saveGroup = async () => {
   } else {
     data.rules = [];
     data.memberIds = [...selectedMemberIds];
-    if (!data.memberIds.length) return RMS.toast.show('Select at least one member for custom group', 'warning');
+    if (!data.memberIds.length) return RMS.mutations.showValidationError('#groupForm', 'Select at least one member for custom group');
   }
 
   const id = document.getElementById('groupId').value;
-  const res = id ? await RMS.api.put(`/groups/${id}`, data) : await RMS.api.post('/groups', data);
-
-  if (res?.success) {
-    RMS.toast.show(id ? 'Group updated' : 'Group created');
+  const result = await RMS.mutations.runMutation(button, () => id
+    ? RMS.api.put(`/groups/${id}`, data)
+    : RMS.api.post('/groups', data), {
+    form: '#groupForm',
+    pending: 'Saving…',
+    success: id ? 'Group updated' : 'Group created'
+  });
+  if (result.ok) {
     bootstrap.Modal.getInstance(document.getElementById('groupModal'))?.hide();
     await reloadGroups();
-  } else {
-    RMS.toast.show(res?.message || 'Failed to save group', 'error');
   }
 };
 
@@ -419,20 +421,17 @@ window.viewMembers = async (id) => {
   new bootstrap.Modal(document.getElementById('membersModal')).show();
 };
 
-window.saveMembers = async () => {
+window.saveMembers = async (button) => {
   if (!activeGroupId) return;
-
-  let res;
-  if (activeGroupType === 'dynamic') {
-    res = await RMS.api.put(`/groups/${activeGroupId}`, {
-      excludedMembers: [...excludedMemberIds]
-    });
-  } else {
-    res = await RMS.api.put(`/groups/${activeGroupId}/members`, { memberIds: [...selectedMemberIds] });
-  }
-
-  if (res?.success) {
-    RMS.toast.show('Members updated');
+  const result = await RMS.mutations.runMutation(button, () => activeGroupType === 'dynamic'
+    ? RMS.api.put(`/groups/${activeGroupId}`, { excludedMembers: [...excludedMemberIds] })
+    : RMS.api.put(`/groups/${activeGroupId}/members`, { memberIds: [...selectedMemberIds] }), {
+    form: '#membersEditSection',
+    pending: 'Saving…',
+    success: 'Members updated'
+  });
+  if (result.ok) {
+    const res = result.value;
     const group = res.data?.group || res.data;
     const members = res.data?.members || resolveGroupMembers({ ...group, excludedMembers: [...excludedMemberIds], members: [...selectedMemberIds], type: activeGroupType });
     allGroups = allGroups.map(g => g._id === activeGroupId ? { ...g, ...group, memberCount: members.length } : g);
@@ -440,14 +439,15 @@ window.saveMembers = async () => {
     renderGroups();
     renderMembersModalContent(members);
     if (activeGroupType === 'static') renderModalMemberPicker();
-  } else {
-    RMS.toast.show(res?.message || 'Failed to update members', 'error');
   }
 };
 
-window.deleteGroup = (id) => RMS.components.confirmDelete('Delete this group?', async () => {
+window.deleteGroup = (id) => RMS.components.confirmDelete('Delete this group?', (button) => RMS.mutations.runMutation(button, async () => {
   await RMS.api.delete(`/groups/${id}`);
-  RMS.toast.show('Group deleted');
   allGroups = allGroups.filter(g => g._id !== id);
   renderGroups();
-});
+}, {
+  pending: 'Deleting…',
+  success: 'Group deleted',
+  errorTarget: '#rmsConfirmStatus'
+}));

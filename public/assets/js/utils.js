@@ -34,19 +34,27 @@ window.RMS.utils = {
   },
 
   async queueDeliveryJob(payload, options = {}) {
-    const res = await window.RMS.api.post('/delivery/jobs', payload);
-    if (res?.success) {
-      const total = res.data?.stats?.total;
-      const msg = options.successMessage
-        || (typeof total === 'number'
-          ? `Queued ${total.toLocaleString()} message${total === 1 ? '' : 's'} for delivery`
-          : (res.message || 'Messages queued'));
-      window.RMS.toast.show(msg, 'success');
-      if (options.redirect) window.location.href = options.redirect;
-      return res.data;
-    }
-    window.RMS.toast.show(res?.message || options.errorMessage || 'Delivery queue failed', 'error');
-    return null;
+    const result = await window.RMS.mutations.runMutation(
+      options.button,
+      () => window.RMS.api.post('/delivery/jobs', payload),
+      {
+        form: options.form,
+        errorTarget: options.errorTarget,
+        pending: options.pendingMessage || 'Queueing…',
+        success: (res) => {
+          const total = res.data?.stats?.total;
+          return options.successMessage
+            || (typeof total === 'number'
+              ? `Queued ${total.toLocaleString()} message${total === 1 ? '' : 's'} for delivery`
+              : (res.message || 'Messages queued'));
+        },
+        error: (error) => options.errorMessage || error?.message || 'Delivery queue failed'
+      }
+    );
+
+    if (!result.ok) return null;
+    if (options.redirect) window.location.href = options.redirect;
+    return result.value.data;
   },
 
   debounce(fn, delay = 300) {
@@ -204,13 +212,18 @@ window.RMS.toast = {
     if (!container) {
       container = document.createElement('div');
       container.className = 'toast-container';
+      container.setAttribute('aria-live', 'polite');
+      container.setAttribute('aria-atomic', 'false');
       document.body.appendChild(container);
     }
     const icons = { success: 'check-circle-fill', error: 'x-circle-fill', warning: 'exclamation-triangle-fill', info: 'info-circle-fill' };
     const colors = { success: '#10b981', error: '#ef4444', warning: '#f59e0b', info: '#2563eb' };
     const toast = document.createElement('div');
     toast.className = 'toast-rms d-flex align-items-center gap-2';
-    toast.innerHTML = `<i class="bi bi-${icons[type] || icons.info}" style="color:${colors[type] || colors.info};font-size:1.25rem"></i><span>${message}</span>`;
+    toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    toast.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
+    toast.setAttribute('aria-atomic', 'true');
+    toast.innerHTML = `<i class="bi bi-${icons[type] || icons.info}" aria-hidden="true" style="color:${colors[type] || colors.info};font-size:1.25rem"></i><span>${message}</span>`;
     container.appendChild(toast);
     setTimeout(() => {
       toast.style.opacity = '0';

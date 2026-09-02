@@ -69,9 +69,11 @@ function defaultResponse(method, pathname) {
   if (pathname === '/api/templates') return { success: true, data: [data.template] };
   if (pathname === '/api/campaigns' && method === 'GET') return { success: true, data: [data.campaign] };
   if (pathname === '/api/campaigns' && method === 'POST') return { success: true, data: data.campaign, message: 'Campaign created successfully' };
-  if (pathname === '/api/events') return { success: true, data: [data.event] };
+  if (pathname === '/api/events' && method === 'GET') return { success: true, data: [data.event] };
+  if (pathname === '/api/events' && method === 'POST') return { success: true, data: data.event, message: 'Invitation created' };
   if (pathname === `/api/events/${data.ids.event}`) return { success: true, data: data.event };
-  if (pathname === '/api/festivals') return { success: true, data: [data.festival] };
+  if (pathname === '/api/festivals' && method === 'GET') return { success: true, data: [data.festival] };
+  if (pathname === '/api/festivals' && method === 'POST') return { success: true, data: data.festival, message: 'Festival created' };
   if (pathname === `/api/festivals/${data.ids.festival}`) return { success: true, data: data.festival };
   if (pathname === '/api/delivery/jobs' && method === 'GET') return { success: true, data: [data.job], pagination: { page: 1, limit: 30, total: 1, pages: 1 } };
   if (pathname === '/api/delivery/jobs' && method === 'POST') return { success: true, data: data.job, message: 'Delivery job queued' };

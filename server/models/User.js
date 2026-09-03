@@ -18,6 +18,7 @@ const userSchema = new mongoose.Schema({
     campaign: { type: Boolean, default: true }
   },
   isActive: { type: Boolean, default: true },
+  sessionVersion: { type: Number, default: 0 },
   lastLogin: Date
 }, { timestamps: true });
 

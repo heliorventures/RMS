@@ -4,6 +4,7 @@ const Campaign = require('../models/Campaign');
 const CommunicationHistory = require('../models/CommunicationHistory');
 const Notification = require('../models/Notification');
 const Event = require('../models/Event');
+const { getMonthlyChannelSeries } = require('../services/reportService');
 
 function countByField(items, field) {
   const map = {};
@@ -26,13 +27,14 @@ function birthdaysByMonth(contacts) {
 const dashboardController = {
   async getStats(req, res) {
     try {
-      const [contacts, messages, campaigns, events, commHistory, notifications] = await Promise.all([
+      const [contacts, messages, campaigns, events, commHistory, notifications, messagesByMonth] = await Promise.all([
         Contact.find(),
         Message.find(),
         Campaign.find(),
         Event.find(),
         CommunicationHistory.find().sort({ sentAt: -1 }).limit(10),
-        Notification.find().sort({ createdAt: -1 }).limit(10)
+        Notification.find().sort({ createdAt: -1 }).limit(10),
+        getMonthlyChannelSeries(Message)
       ]);
 
       const today = new Date();
@@ -71,13 +73,6 @@ const dashboardController = {
       const pendingMessages = messages.filter(m => m.status === 'pending' || m.status === 'scheduled');
       const emailSent = messages.filter(m => m.type === 'email' && m.status === 'sent').length;
       const whatsappSent = messages.filter(m => m.type === 'whatsapp' && m.status === 'sent').length;
-
-      const messagesByMonth = {};
-      messages.forEach(m => {
-        const d = new Date(m.sentAt || m.createdAt);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-        messagesByMonth[key] = (messagesByMonth[key] || 0) + 1;
-      });
 
       res.json({
         success: true,

@@ -21,6 +21,7 @@ const messageSchema = new mongoose.Schema({
     default: 'pending'
   },
   scheduledAt: Date,
+  scheduleTimezone: String,
   sentAt: Date,
   deliveredAt: Date,
   error: String,
@@ -32,6 +33,6 @@ const messageSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 messageSchema.index({ jobId: 1, status: 1 });
-messageSchema.index({ status: 1, nextRetryAt: 1 });
+messageSchema.index({ status: 1, scheduledAt: 1, nextRetryAt: 1 });
 
 module.exports = mongoose.model('Message', messageSchema);

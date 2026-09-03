@@ -13,13 +13,13 @@ const settingsSchema = new mongoose.Schema({
     host: String,
     port: Number,
     user: String,
-    password: String,
+    password: mongoose.Schema.Types.Mixed,
     fromEmail: String,
     fromName: String
   },
   whatsapp: {
     apiUrl: String,
-    apiKey: String,
+    apiKey: mongoose.Schema.Types.Mixed,
     phoneNumberId: String,
     businessAccountId: String
   },

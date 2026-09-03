@@ -1,9 +1,15 @@
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 const logger = require('../utils/logger');
+const { getSecretCipher } = require('../security/secretCipher');
 
 let transporterCache = null;
 let cacheKey = null;
+
+function resolveStoredSecret(value) {
+  if (typeof value === 'string' || value == null) return value || '';
+  return getSecretCipher().decrypt(value);
+}
 
 function isDryRun() {
   return process.env.DELIVERY_DRY_RUN === 'true';
@@ -31,7 +37,7 @@ function buildCacheKey(smtp) {
       host: smtp?.host || '',
       port: resolveSmtpPort(smtp?.port),
       user: smtp?.user || '',
-      password: smtp?.password || smtp?.pass || '',
+      password: resolveStoredSecret(smtp?.password || smtp?.pass),
       tlsMode: resolveSmtpTlsMode()
     }))
     .digest('hex');
@@ -47,7 +53,7 @@ function buildSmtpTransportOptions(smtp) {
     port,
     secure,
     requireTLS: !secure,
-    auth: { user: smtp.user, pass: smtp.password || smtp.pass || '' },
+    auth: { user: smtp.user, pass: resolveStoredSecret(smtp.password || smtp.pass) },
     pool: true,
     maxConnections: Number(process.env.SMTP_MAX_CONNECTIONS) || 5,
     maxMessages: Number(process.env.SMTP_MAX_MESSAGES) || 100

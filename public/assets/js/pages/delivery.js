@@ -69,7 +69,10 @@ document.getElementById('pageBody').innerHTML = `
 loadJobs();
 
 async function loadJobs() {
-  const res = await RMS.api.get('/delivery/jobs?limit=30');
+  const params = new URLSearchParams({ limit: 30 });
+  const campaignId = RMS.utils.queryParams().campaignId;
+  if (campaignId) params.set('campaignId', campaignId);
+  const res = await RMS.api.get(`/delivery/jobs?${params}`);
   const jobs = res?.data || [];
   document.getElementById('jobCount').textContent = jobs.length;
 

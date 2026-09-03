@@ -33,6 +33,12 @@ window.RMS.utils = {
     return `<span class="badge-status ${map[status] || 'badge-draft'}">${status || 'Unknown'}</span>`;
   },
 
+  formatScheduleConfirmation(message, scheduledAt, scheduleTimezone) {
+    if (!scheduledAt) return message;
+    const normalized = window.RMS.datetime.format(scheduledAt, scheduleTimezone);
+    return `${message}. Scheduled for ${normalized}`;
+  },
+
   async queueDeliveryJob(payload, options = {}) {
     const result = await window.RMS.mutations.runMutation(
       options.button,
@@ -43,10 +49,15 @@ window.RMS.utils = {
         pending: options.pendingMessage || 'Queueing…',
         success: (res) => {
           const total = res.data?.stats?.total;
-          return options.successMessage
+          const message = options.successMessage
             || (typeof total === 'number'
               ? `Queued ${total.toLocaleString()} message${total === 1 ? '' : 's'} for delivery`
               : (res.message || 'Messages queued'));
+          return window.RMS.utils.formatScheduleConfirmation(
+            message,
+            payload.scheduledAt,
+            payload.scheduleTimezone
+          );
         },
         error: (error) => options.errorMessage || error?.message || 'Delivery queue failed'
       }

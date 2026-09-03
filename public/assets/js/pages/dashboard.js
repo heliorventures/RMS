@@ -116,15 +116,14 @@ function initCharts(charts) {
     data: { labels: Object.keys(religion), datasets: [{ data: Object.values(religion), backgroundColor: ['#2563eb','#f59e0b','#10b981','#ef4444','#8b5cf6'] }] },
     options: chartOpts
   });
-  const msgMonths = charts.messagesByMonth || {};
-  const keys = Object.keys(msgMonths).sort();
+  const msgMonths = Array.isArray(charts.messagesByMonth) ? charts.messagesByMonth : [];
   new Chart(document.getElementById('messagesChart'), {
     type: 'line',
     data: {
-      labels: keys.length ? keys : ['Jan','Feb','Mar','Apr','May','Jun'],
+      labels: msgMonths.map(row => row.month),
       datasets: [
-        { label: 'Email', data: keys.length ? keys.map(() => Math.floor(Math.random()*50+20)) : [30,45,38,52,48,60], borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,.1)', fill: true, tension: .4 },
-        { label: 'WhatsApp', data: keys.length ? keys.map(() => Math.floor(Math.random()*40+15)) : [20,35,42,38,55,45], borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.1)', fill: true, tension: .4 }
+        { label: 'Email', data: msgMonths.map(row => row.email || 0), borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,.1)', fill: true, tension: .4 },
+        { label: 'WhatsApp', data: msgMonths.map(row => row.whatsapp || 0), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.1)', fill: true, tension: .4 }
       ]
     },
     options: { ...chartOpts, scales: { y: { beginAtZero: true } } }

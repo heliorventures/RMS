@@ -5,6 +5,9 @@ const {
   buildSmtpSettingsUpdate,
   sanitizeSettingsForUser
 } = require('../server/utils/smtpSettings');
+const { createSecretCipher } = require('../server/security/secretCipher');
+
+const cipher = createSecretCipher([{ id: 'test-key', key: Buffer.alloc(32, 7) }]);
 
 test('preserves the stored SMTP password when an update leaves the password blank', () => {
   const update = buildSmtpSettingsUpdate({
@@ -26,9 +29,10 @@ test('preserves the stored SMTP password when an update leaves the password blan
 });
 
 test('replaces the stored SMTP password only when a new value is supplied', () => {
-  const update = buildSmtpSettingsUpdate({ password: 'new-app-password' });
+  const update = buildSmtpSettingsUpdate({ password: 'new-app-password' }, cipher);
 
-  assert.deepEqual(update, { 'smtp.password': 'new-app-password' });
+  assert.equal(cipher.decrypt(update['smtp.password']), 'new-app-password');
+  assert.equal(JSON.stringify(update).includes('new-app-password'), false);
 });
 
 test('does not expose the SMTP password in an admin settings response', () => {
@@ -45,7 +49,9 @@ test('does not expose the SMTP password in an admin settings response', () => {
     company: { name: 'RMS' },
     smtp: {
       host: 'smtp.gmail.com',
-      user: 'mailer@example.com'
-    }
+      user: 'mailer@example.com',
+      configured: true
+    },
+    whatsapp: { configured: false }
   });
 });

@@ -117,6 +117,7 @@ const BATCH_SIZE = 1000;
 let table;
 let totalContacts = 0;
 let activeFilters = { city: '', sector: '', religion: '', status: '' };
+let requestedEditOpened = false;
 
 ['city','filterCity'].forEach(id => { const el = document.getElementById(id); if (el) CITIES.forEach(c => { el.innerHTML += `<option>${c}</option>`; }); });
 ['sector','filterSector'].forEach(id => { const el = document.getElementById(id); if (el) SECTORS.forEach(s => { el.innerHTML += `<option>${s}</option>`; }); });
@@ -179,7 +180,14 @@ function initContactsTable() {
     ],
     pageLength: 25,
     lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
-    order: []
+    order: [],
+    initComplete() {
+      const editId = RMS.utils.queryParams().edit;
+      if (editId && !requestedEditOpened) {
+        requestedEditOpened = true;
+        window.editContact(editId);
+      }
+    }
   });
 
   const search = RMS.utils.queryParams().search;

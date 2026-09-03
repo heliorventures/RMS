@@ -16,6 +16,7 @@ const eventSchema = new mongoose.Schema({
     sectors: [String]
   },
   scheduledAt: Date,
+  scheduleTimezone: String,
   status: { type: String, enum: ['draft', 'scheduled', 'sent', 'completed'], default: 'draft' },
   deliveryStats: {
     email: { sent: Number, delivered: Number, failed: Number },

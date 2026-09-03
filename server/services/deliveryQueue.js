@@ -185,7 +185,7 @@ async function processBatch() {
     const jobs = {};
     for (const jid of jobIds) {
       jobs[jid] = await messageStore.getJob(jid);
-      if (jobs[jid] && jobs[jid].status === 'queued') {
+      if (jobs[jid] && ['queued', 'scheduled'].includes(jobs[jid].status)) {
         await messageStore.updateJob(jid, { status: 'processing', startedAt: new Date() });
       }
     }

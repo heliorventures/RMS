@@ -183,6 +183,7 @@ set -euo pipefail
 
 APP_DIR="$1"
 TAG="$2"
+PUBLIC_BASE_URL="$3"
 
 cd "$APP_DIR"
 
@@ -226,15 +227,17 @@ test -f .env.example || fail "$APP_DIR/.env.example does not exist"
 
 if [ ! -f .env ]; then
     cp .env.example .env
-    echo "Created .env from .env.example. Review JWT_SECRET before exposing RMS publicly."
+    echo "Created .env from .env.example. Configure JWT_SECRET and SETTINGS_ENCRYPTION_KEYS before exposing RMS publicly."
 else
     cp .env ".env.backup.$(date +%Y%m%d-%H%M%S)"
 fi
 
 set_env_value .env RMS_IMAGE_TAG "$TAG"
+set_env_value .env APP_BASE_URL "$PUBLIC_BASE_URL"
 
 mongodb_uri="$(get_env_value .env MONGODB_URI)"
 jwt_secret="$(get_env_value .env JWT_SECRET)"
+settings_encryption_keys="$(get_env_value .env SETTINGS_ENCRYPTION_KEYS)"
 network_name="$(get_env_value .env RMS_DOCKER_NETWORK)"
 
 if [ -z "$mongodb_uri" ] || printf "%s" "$mongodb_uri" | grep -q 'username:password'; then
@@ -242,6 +245,9 @@ if [ -z "$mongodb_uri" ] || printf "%s" "$mongodb_uri" | grep -q 'username:passw
 fi
 if [ -z "$jwt_secret" ] || [ "$jwt_secret" = "change-this-rms-jwt-secret-min-32-chars" ] || [ "$jwt_secret" = "your-super-secret-jwt-key-change-in-production" ]; then
     fail "JWT_SECRET must be configured in $APP_DIR/.env before deployment"
+fi
+if [ -z "$settings_encryption_keys" ] || printf "%s" "$settings_encryption_keys" | grep -q 'REPLACE_WITH_BASE64_32_BYTE_KEY'; then
+    fail "SETTINGS_ENCRYPTION_KEYS must be configured in $APP_DIR/.env before deployment"
 fi
 if [ -z "$network_name" ]; then
     fail "RMS_DOCKER_NETWORK must be configured in $APP_DIR/.env"
@@ -252,6 +258,8 @@ echo "==> Effective RMS deployment environment"
 printf 'RMS_IMAGE_TAG=%s\n' "$(get_env_value .env RMS_IMAGE_TAG)"
 printf 'MONGODB_URI=%s\n' '[set]'
 printf 'JWT_SECRET=%s\n' '[set]'
+printf 'SETTINGS_ENCRYPTION_KEYS=%s\n' '[set]'
+printf 'APP_BASE_URL=%s\n' "$PUBLIC_BASE_URL"
 printf 'RMS_DOCKER_NETWORK=%s\n' "$network_name"
 '@
     Write-Utf8NoBomFile -Path $EnvReconcileScriptPath -Content $EnvReconcileScriptContent
@@ -333,7 +341,7 @@ echo "==> RMS deployment validation passed"
     if ($SyncEnvExample) {
         Copy-ToRemote "Uploading RMS .env.example" $EnvExample $RemoteEnvExamplePath
         Copy-ToRemote "Uploading RMS environment reconciliation script" $EnvReconcileScriptPath $RemoteEnvReconcileScriptPath
-        Invoke-Remote "Reconciling remote RMS .env" "set -eu; bash $RemoteEnvReconcileScriptPathQ $AppDirQ $TagQ"
+        Invoke-Remote "Reconciling remote RMS .env" "set -eu; bash $RemoteEnvReconcileScriptPathQ $AppDirQ $TagQ $PublicBaseUrlQ"
     }
 
     if ($LoadImage) {

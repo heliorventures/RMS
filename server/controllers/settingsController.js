@@ -1,6 +1,8 @@
 const Settings = require('../models/Settings');
 const User = require('../models/User');
-const { buildSmtpSettingsUpdate, sanitizeSettingsForUser } = require('../utils/smtpSettings');
+const { buildProviderSettingsUpdate, sanitizeSettingsForUser } = require('../utils/smtpSettings');
+const { getSecretCipher } = require('../security/secretCipher');
+const { assertPasswordPolicy } = require('../auth/passwordPolicy');
 
 function stripPassword(user) {
   if (!user) return null;
@@ -16,14 +18,19 @@ const settingsController = {
       const data = sanitizeSettingsForUser(settings, req.user);
       res.json({ success: true, data });
     } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
+      res.status(err.status || 500).json({ success: false, code: err.code, message: err.message });
     }
   },
 
   async update(req, res) {
     try {
-      const { smtp, ...settingsFields } = req.body || {};
-      const update = { ...settingsFields, ...buildSmtpSettingsUpdate(smtp) };
+      const { smtp, whatsapp, ...settingsFields } = req.body || {};
+      const hasNewSecret = Boolean(
+        (typeof smtp?.password === 'string' && smtp.password.trim()) ||
+        (typeof whatsapp?.apiKey === 'string' && whatsapp.apiKey.trim())
+      );
+      const cipher = hasNewSecret ? getSecretCipher() : undefined;
+      const update = { ...settingsFields, ...buildProviderSettingsUpdate({ smtp, whatsapp }, cipher) };
       const settings = await Settings.findOneAndUpdate(
         {},
         { $set: update },
@@ -31,7 +38,7 @@ const settingsController = {
       );
       res.json({ success: true, data: sanitizeSettingsForUser(settings, req.user) });
     } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
+      res.status(err.status || 500).json({ success: false, code: err.code, message: err.message });
     }
   },
 
@@ -50,6 +57,7 @@ const settingsController = {
       if (!name?.trim() || !email?.trim() || !password) {
         return res.status(400).json({ success: false, message: 'Name, email and password are required.' });
       }
+      assertPasswordPolicy(password);
 
       const normalizedEmail = email.trim().toLowerCase();
       const userRole = role || 'user';
@@ -66,7 +74,7 @@ const settingsController = {
       });
       res.status(201).json({ success: true, data: stripPassword(user), message: 'User created.' });
     } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
+      res.status(err.status || 500).json({ success: false, code: err.code, message: err.message });
     }
   },
 
@@ -87,11 +95,15 @@ const settingsController = {
       if (role) user.role = role;
       if (phone !== undefined) user.phone = phone;
       if (isActive !== undefined) user.isActive = isActive;
-      if (password) user.password = password;
+      if (password) {
+        assertPasswordPolicy(password);
+        user.password = password;
+        user.sessionVersion = Number(user.sessionVersion || 0) + 1;
+      }
       await user.save();
       res.json({ success: true, data: stripPassword(user), message: 'User updated.' });
     } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
+      res.status(err.status || 500).json({ success: false, code: err.code, message: err.message });
     }
   },
 

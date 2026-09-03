@@ -44,13 +44,15 @@ let todayAnniversaries = [], anniversaryTemplates = [];
 
 window.sendAnniversaryWish = async (contactId, button) => {
   const tmpl = anniversaryTemplates.find(t => t.isDefault) || anniversaryTemplates[0];
+  const schedule = RMS.datetime.fromLocalInput(document.getElementById('wishSchedule')?.value);
   await RMS.utils.queueDeliveryJob({
     name: `Anniversary Wish — ${new Date().toLocaleDateString('en-IN')}`,
     type: 'anniversary',
     channel: document.getElementById('wishChannel')?.value || 'email',
     subject: tmpl?.subject || 'Happy Anniversary {{Name}}!',
     body: tmpl?.body || 'Dear {{Name}}, warm wishes on your anniversary!',
-    contactIds: [contactId]
+    contactIds: [contactId],
+    ...schedule
   }, { button, pendingMessage: 'Sending…' });
 };
 
@@ -61,13 +63,15 @@ window.sendAnniversaryWishes = async (button) => {
   }
   const templateId = document.getElementById('wishTemplate').value;
   const tmpl = anniversaryTemplates.find(t => t._id === templateId) || anniversaryTemplates[0];
+  const schedule = RMS.datetime.fromLocalInput(document.getElementById('wishSchedule').value);
   const job = await RMS.utils.queueDeliveryJob({
     name: `Anniversary Wishes — ${new Date().toLocaleDateString('en-IN')}`,
     type: 'anniversary',
     channel: document.getElementById('wishChannel').value,
     subject: tmpl?.subject || 'Happy Anniversary {{Name}}!',
     body: tmpl?.body || 'Dear {{Name}}, warm wishes on your anniversary!',
-    contactIds
+    contactIds,
+    ...schedule
   }, { button, form: '#anniversaryWishForm', pendingMessage: 'Sending…' });
   if (job) bootstrap.Modal.getInstance(document.getElementById('wishModal')).hide();
 };

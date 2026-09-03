@@ -77,8 +77,7 @@ window.editEvent = async (id) => {
   document.getElementById('eventChannel').value = event.channel || 'email';
 
   if (event.scheduledAt) {
-    const d = new Date(event.scheduledAt);
-    document.getElementById('eventSchedule').value = d.toISOString().slice(0, 16);
+    document.getElementById('eventSchedule').value = RMS.datetime.toLocalInput(event.scheduledAt);
   } else {
     document.getElementById('eventSchedule').value = '';
   }
@@ -90,6 +89,7 @@ function eventFormData() {
   const title = document.getElementById('eventTitle').value.trim();
   const id = document.getElementById('eventId').value;
   const existing = id ? allEvents.find(e => e._id === id) : null;
+  const schedule = RMS.datetime.fromLocalInput(document.getElementById('eventSchedule').value);
   return {
     title,
     description: document.getElementById('eventDesc').value,
@@ -98,7 +98,7 @@ function eventFormData() {
     time: document.getElementById('eventTime').value,
     mapsLink: document.getElementById('eventMaps').value,
     channel: document.getElementById('eventChannel').value,
-    scheduledAt: document.getElementById('eventSchedule').value || null,
+    ...schedule,
     status: existing?.status || 'draft',
     recipients: existing?.recipients || { contacts: [], groups: [], cities: [], sectors: [] },
     deliveryStats: existing?.deliveryStats
@@ -111,7 +111,7 @@ async function persistEvent() {
   const res = id
     ? await RMS.api.put(`/events/${id}`, data)
     : await RMS.api.post('/events', data);
-  return res.data;
+  return { ...res.data, ...data, _id: res.data?._id };
 }
 
 function validateEvent() {
@@ -144,7 +144,11 @@ window.sendEvent = async (button) => {
   }, {
     form: '#eventForm',
     pending: 'Sending…',
-    success: 'Invitation queued for delivery',
+    success: (job) => RMS.utils.formatScheduleConfirmation(
+      'Invitation queued for delivery',
+      job.scheduledAt,
+      job.scheduleTimezone
+    ),
     error: (error) => {
       if (phase === 'queueing') return `Invitation saved, but delivery queue failed: ${error.message}`;
       if (phase === 'updating-status') return `Delivery was queued, but invitation status could not be updated: ${error.message}`;
@@ -169,7 +173,11 @@ window.sendEventById = async (id, button) => {
     return queueEventDeliveryRaw(event, nextPhase => { phase = nextPhase; });
   }, {
     pending: 'Sending…',
-    success: 'Invitation queued for delivery',
+    success: (job) => RMS.utils.formatScheduleConfirmation(
+      'Invitation queued for delivery',
+      job.scheduledAt,
+      job.scheduleTimezone
+    ),
     error: (error) => phase === 'updating-status'
       ? `Delivery was queued, but invitation status could not be updated: ${error.message}`
       : error.message
@@ -194,7 +202,9 @@ async function queueEventDeliveryRaw(event, setPhase = () => {}) {
     subject: event.title,
     body,
     contactIds: recipients.contacts || [],
-    groupIds: recipients.groups || []
+    groupIds: recipients.groups || [],
+    scheduledAt: event.scheduledAt || null,
+    scheduleTimezone: event.scheduleTimezone || RMS.datetime.browserTimezone()
   };
   if (!payload.contactIds.length && !payload.groupIds.length) {
     payload.filters = {
@@ -210,7 +220,11 @@ async function queueEventDeliveryRaw(event, setPhase = () => {}) {
   const jobRes = await RMS.api.post('/delivery/jobs', payload);
   setPhase('updating-status');
   await RMS.api.put(`/events/${event._id}`, { status: 'scheduled' });
-  return jobRes.data;
+  return {
+    ...jobRes.data,
+    scheduledAt: payload.scheduledAt,
+    scheduleTimezone: payload.scheduleTimezone
+  };
 };
 
 window.previewEvent = () => {

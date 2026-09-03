@@ -142,7 +142,7 @@ test('user save failure remains inline and keeps the editor open', async ({ rms 
   await rms.page.getByRole('button', { name: 'Add User' }).click();
   await rms.page.locator('#userName').fill('Failure Test User');
   await rms.page.locator('#userEmail').fill('failure@example.com');
-  await rms.page.locator('#userPassword').fill('password123');
+  await rms.page.locator('#userPassword').fill('password1234!');
   await rms.page.getByRole('button', { name: 'Save User' }).click();
 
   await expectFailureWithoutSuccess(rms.page, rms.page.locator('#userForm'), 'User persistence failed', 'User created');

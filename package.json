@@ -12,6 +12,7 @@
     "test:e2e:headed": "playwright test --headed",
     "seed:admin": "node server/seed/seed-admin.js",
     "seed:sample": "node server/seed/import-sample-data.js",
+    "settings:encrypt-secrets": "node server/maintenance/encrypt-settings-secrets.js",
     "data:delete": "node server/maintenance/delete-data.js"
   },
   "keywords": [

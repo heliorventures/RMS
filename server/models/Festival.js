@@ -14,6 +14,7 @@ const festivalSchema = new mongoose.Schema({
     groups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Group' }]
   },
   scheduledAt: Date,
+  scheduleTimezone: String,
   status: { type: String, enum: ['draft', 'scheduled', 'sent'], default: 'draft' },
   sentCount: { type: Number, default: 0 }
 }, { timestamps: true });

@@ -1,6 +1,7 @@
 RMS.components.initLayout('/pages/reports.html', 'Reports & Analytics', 'Home / Reports');
-document.getElementById('pageActions').innerHTML = `<button class="btn btn-outline-primary" onclick="RMS.toast.show('Report exported as PDF')"><i class="bi bi-download me-1"></i> Export PDF</button>`;
+document.getElementById('pageActions').innerHTML = '';
 document.getElementById('pageBody').innerHTML = `
+  <div class="alert alert-danger d-none" id="reportsError" role="alert"></div>
   <ul class="nav nav-tabs mb-4"><li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#contacts">Contacts</button></li>
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#birthday">Birthday</button></li>
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#campaign">Campaign</button></li>
@@ -16,11 +17,18 @@ document.getElementById('pageBody').innerHTML = `
 
 initReports();
 async function initReports() {
-  const [contactReport, birthdayReport, campaignReport, deliveryReport, dashboard] = await Promise.all([
-    RMS.api.get('/reports/contacts'), RMS.api.get('/reports/birthdays'),
-    RMS.api.get('/reports/campaigns'), RMS.api.get('/reports/delivery'),
-    RMS.api.get('/dashboard/stats')
-  ]);
+  let contactReport, birthdayReport, campaignReport, deliveryReport;
+  try {
+    [contactReport, birthdayReport, campaignReport, deliveryReport] = await Promise.all([
+      RMS.api.get('/reports/contacts'), RMS.api.get('/reports/birthdays'),
+      RMS.api.get('/reports/campaigns'), RMS.api.get('/reports/delivery')
+    ]);
+  } catch (error) {
+    const target = document.getElementById('reportsError');
+    target.textContent = error.message || 'Reports could not be loaded.';
+    target.classList.remove('d-none');
+    return;
+  }
   const cr = contactReport?.data || {};
   makeChart('cityChart', 'bar', Object.keys(cr.byCity||{}), Object.values(cr.byCity||{}), '#2563eb');
   makeChart('sectorReportChart', 'doughnut', Object.keys(cr.bySector||{}), Object.values(cr.bySector||{}));

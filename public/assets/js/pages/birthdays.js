@@ -168,13 +168,15 @@ window.showDayBirthdays = (day) => {
 };
 window.sendBirthdayWish = async (contactId, channel, button) => {
   const tmpl = birthdayTemplates.find(t => t.isDefault) || birthdayTemplates[0];
+  const schedule = RMS.datetime.fromLocalInput(document.getElementById('wishSchedule')?.value);
   await RMS.utils.queueDeliveryJob({
     name: `Birthday Wish — ${new Date().toLocaleDateString('en-IN')}`,
     type: 'birthday',
     channel: channel || document.getElementById('wishChannel')?.value || 'email',
     subject: tmpl?.subject || 'Happy Birthday {{Name}}!',
     body: tmpl?.body || 'Dear {{Name}}, wishing you a wonderful birthday!',
-    contactIds: [contactId]
+    contactIds: [contactId],
+    ...schedule
   }, { button, pendingMessage: 'Sending…' });
 };
 window.sendWish = async (button) => {
@@ -184,13 +186,15 @@ window.sendWish = async (button) => {
   }
   const templateId = document.getElementById('wishTemplate').value;
   const tmpl = birthdayTemplates.find(t => t._id === templateId) || birthdayTemplates[0];
+  const schedule = RMS.datetime.fromLocalInput(document.getElementById('wishSchedule').value);
   const job = await RMS.utils.queueDeliveryJob({
     name: `Birthday Wishes — ${new Date().toLocaleDateString('en-IN')}`,
     type: 'birthday',
     channel: document.getElementById('wishChannel').value,
     subject: tmpl?.subject || 'Happy Birthday {{Name}}!',
     body: tmpl?.body || 'Dear {{Name}}, wishing you a wonderful birthday!',
-    contactIds
+    contactIds,
+    ...schedule
   }, { button, form: '#birthdayWishForm', pendingMessage: 'Sending…' });
   if (job) bootstrap.Modal.getInstance(document.getElementById('wishModal')).hide();
 };

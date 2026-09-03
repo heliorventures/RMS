@@ -68,7 +68,7 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body" id="forgotForm">
-          <p class="text-secondary">Enter your email and we'll send you a reset link.</p>
+          <p class="text-secondary">Enter your email. If the account exists and email delivery succeeds, a reset link will arrive shortly.</p>
           <input type="email" class="form-control" id="forgotEmail" placeholder="Email address">
         </div>
         <div class="modal-footer">
@@ -129,7 +129,7 @@
         {
           form: '#forgotForm',
           pending: 'Sending…',
-          success: 'Reset link sent if account exists'
+          success: 'If an account exists and email delivery succeeds, a reset link will arrive shortly.'
         }
       );
       if (result.ok) bootstrap.Modal.getInstance(document.getElementById('forgotModal')).hide();

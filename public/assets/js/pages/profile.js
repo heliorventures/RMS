@@ -65,6 +65,9 @@ window.changePassword = async (button) => {
   if (newPass !== document.getElementById('confPass').value) {
     return RMS.mutations.showValidationError('#passwordForm', 'Passwords do not match', '#confPass');
   }
+  if (newPass.length < 12) {
+    return RMS.mutations.showValidationError('#passwordForm', 'Password must be at least 12 characters', '#newPass');
+  }
   const result = await RMS.mutations.runMutation(button, () => RMS.api.put('/auth/change-password', {
     currentPassword: document.getElementById('curPass').value,
     newPassword: newPass

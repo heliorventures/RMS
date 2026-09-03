@@ -6,6 +6,7 @@ const router = express.Router();
 router.use(auth);
 
 router.get('/jobs', deliveryController.listJobs);
+router.get('/capabilities', deliveryController.getCapabilities);
 router.post('/jobs', deliveryController.createDeliveryJob);
 router.get('/jobs/:id', deliveryController.getJob);
 router.get('/jobs/:id/messages', deliveryController.getJobMessages);

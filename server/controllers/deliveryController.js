@@ -3,6 +3,8 @@ const { resolveRecipients, applyTemplate, channelsForJob, filterContacts } = req
 const { validateRecipient } = require('../utils/validators');
 const emailService = require('../services/emailService');
 const logger = require('../utils/logger');
+const { normalizeSchedule } = require('../time/schedule');
+const { getProviderCapabilities } = require('../services/providerCapabilities');
 
 const DEFAULT_MAX_RETRIES = Number(process.env.DELIVERY_MAX_RETRIES) || 3;
 const DEFAULT_BATCH = Number(process.env.DELIVERY_BATCH_SIZE) || 25;
@@ -20,12 +22,19 @@ async function createDeliveryJob(req, res) {
       filters,
       campaignId,
       maxRetries,
-      createdBy
+      createdBy,
+      scheduledAt,
+      scheduleTimezone
     } = req.body;
 
     if (!body && !subject) {
       return res.status(400).json({ success: false, message: 'Subject or body is required.' });
     }
+    if (channel === 'sms') {
+      return res.status(400).json({ success: false, code: 'PROVIDER_UNAVAILABLE', message: 'SMS provider is not configured' });
+    }
+    const schedule = normalizeSchedule({ scheduledAt, scheduleTimezone });
+    const isFutureSchedule = schedule.scheduledAt && schedule.scheduledAt.getTime() > Date.now();
 
     const [allContacts, allGroups] = await Promise.all([
       messageStore.getAllContacts(),
@@ -50,7 +59,8 @@ async function createDeliveryJob(req, res) {
       type,
       campaignId: campaignId || null,
       channel,
-      status: 'queued',
+      status: isFutureSchedule ? 'scheduled' : 'queued',
+      ...schedule,
       subject: subject || '',
       body: body || '',
       stats: { total: 0, processed: 0, sent: 0, delivered: 0, failed: 0, skipped: 0, pending: 0, retrying: 0 },
@@ -76,7 +86,8 @@ async function createDeliveryJob(req, res) {
           type: ch,
           subject: applyTemplate(subject || '', contact),
           body: applyTemplate(body || '', contact),
-          status: validation.valid ? 'pending' : 'skipped',
+          status: validation.valid ? (isFutureSchedule ? 'scheduled' : 'pending') : 'skipped',
+          ...schedule,
           failureReason: validation.valid ? null : validation.reason,
           error: validation.valid ? null : validation.reason,
           retryCount: 0,
@@ -91,7 +102,10 @@ async function createDeliveryJob(req, res) {
       await messageStore.createMessages(messageRows.slice(i, i + INSERT_CHUNK));
     }
     const stats = await messageStore.recountJobStats(job._id);
-    await messageStore.updateJob(job._id, { stats, status: stats.pending > 0 ? 'queued' : 'completed' });
+    await messageStore.updateJob(job._id, {
+      stats,
+      status: stats.pending > 0 ? (isFutureSchedule ? 'scheduled' : 'queued') : 'completed'
+    });
 
     if (campaignId) {
       await messageStore.updateCampaign(campaignId, { status: 'running', stats: { total: stats.total, sent: 0, delivered: 0, failed: stats.failed } });
@@ -106,7 +120,7 @@ async function createDeliveryJob(req, res) {
     });
   } catch (err) {
     logger.error('Create delivery job failed', { error: err.message });
-    res.status(500).json({ success: false, message: err.message });
+    res.status(err.status || 500).json({ success: false, message: err.message });
   }
 }
 
@@ -126,7 +140,7 @@ async function listJobs(req, res) {
   try {
     const page = +req.query.page || 1;
     const limit = +req.query.limit || 20;
-    const result = await messageStore.listJobs({ page, limit });
+    const result = await messageStore.listJobs({ page, limit, campaignId: req.query.campaignId });
     res.json({ success: true, ...result });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -206,6 +220,15 @@ async function getLogs(req, res) {
   }
 }
 
+async function getCapabilities(req, res) {
+  try {
+    const settings = await messageStore.getSettings();
+    res.json({ success: true, data: getProviderCapabilities(settings) });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+}
+
 const deliveryController = {
   createDeliveryJob,
   getJob,
@@ -213,7 +236,8 @@ const deliveryController = {
   getJobMessages,
   retryFailed,
   testEmail,
-  getLogs
+  getLogs,
+  getCapabilities
 };
 
 module.exports = deliveryController;

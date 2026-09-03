@@ -12,6 +12,7 @@ const campaignSchema = new mongoose.Schema({
   },
   content: String,
   scheduledAt: Date,
+  scheduleTimezone: String,
   status: { type: String, enum: ['draft', 'scheduled', 'running', 'completed', 'failed'], default: 'draft' },
   stats: {
     total: { type: Number, default: 0 },

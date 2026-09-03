@@ -77,8 +77,7 @@ window.editFestival = async (id) => {
   });
 
   if (festival.scheduledAt) {
-    const d = new Date(festival.scheduledAt);
-    document.getElementById('festSchedule').value = d.toISOString().slice(0, 16);
+    document.getElementById('festSchedule').value = RMS.datetime.toLocalInput(festival.scheduledAt);
   } else {
     document.getElementById('festSchedule').value = '';
   }
@@ -93,17 +92,24 @@ async function queueFestivalDeliveryRaw(festival, setPhase = () => {}) {
     religions: festival.recipients?.religions || (festival.religion ? [festival.religion] : [])
   };
   setPhase('queueing');
-  const jobRes = await RMS.api.post('/delivery/jobs', {
+  const payload = {
     name: `Festival: ${festival.name}`,
     type: 'festival',
     channel: 'both',
     subject: festival.name,
     body: festival.message || `Warm wishes on ${festival.name}, {{Name}}!`,
-    filters
-  });
+    filters,
+    scheduledAt: festival.scheduledAt || null,
+    scheduleTimezone: festival.scheduleTimezone || RMS.datetime.browserTimezone()
+  };
+  const jobRes = await RMS.api.post('/delivery/jobs', payload);
   setPhase('updating-status');
   await RMS.api.put(`/festivals/${festival._id}`, { status: 'scheduled', sentCount: jobRes.data?.stats?.total || 0 });
-  return jobRes.data;
+  return {
+    ...jobRes.data,
+    scheduledAt: payload.scheduledAt,
+    scheduleTimezone: payload.scheduleTimezone
+  };
 }
 
 function validateFestival() {
@@ -116,13 +122,14 @@ function festivalFormData() {
   const name = document.getElementById('festName').value.trim();
   const citySelect = document.getElementById('festCity');
   const sectorSelect = document.getElementById('festSector');
+  const schedule = RMS.datetime.fromLocalInput(document.getElementById('festSchedule').value);
   return {
     name,
     date: document.getElementById('festDate').value,
     religion: document.getElementById('festReligion').value,
     message: document.getElementById('festMessage').value,
     status: document.getElementById('festStatus').value,
-    scheduledAt: document.getElementById('festSchedule').value || null,
+    ...schedule,
     recipients: {
       cities: Array.from(citySelect.selectedOptions).map(o => o.value),
       sectors: Array.from(sectorSelect.selectedOptions).map(o => o.value),
@@ -138,7 +145,7 @@ async function persistFestival() {
   const res = id
     ? await RMS.api.put(`/festivals/${id}`, data)
     : await RMS.api.post('/festivals', data);
-  return res.data;
+  return { ...res.data, ...data, _id: res.data?._id };
 }
 
 window.saveFestival = async (button) => {
@@ -163,7 +170,11 @@ window.sendFestival = async (button) => {
   }, {
     form: '#festivalForm',
     pending: 'Sending…',
-    success: 'Festival message queued for delivery',
+    success: (job) => RMS.utils.formatScheduleConfirmation(
+      'Festival message queued for delivery',
+      job.scheduledAt,
+      job.scheduleTimezone
+    ),
     error: (error) => {
       if (phase === 'queueing') return `Festival saved, but delivery queue failed: ${error.message}`;
       if (phase === 'updating-status') return `Delivery was queued, but festival status could not be updated: ${error.message}`;
@@ -187,7 +198,11 @@ window.sendFestivalById = async (id, button) => {
     return queueFestivalDeliveryRaw(festival, nextPhase => { phase = nextPhase; });
   }, {
     pending: 'Sending…',
-    success: 'Festival message queued for delivery',
+    success: (job) => RMS.utils.formatScheduleConfirmation(
+      'Festival message queued for delivery',
+      job.scheduledAt,
+      job.scheduleTimezone
+    ),
     error: (error) => phase === 'updating-status'
       ? `Delivery was queued, but festival status could not be updated: ${error.message}`
       : error.message

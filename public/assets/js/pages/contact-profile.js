@@ -15,7 +15,7 @@ async function loadProfile(contactId) {
   document.getElementById('pageActions').innerHTML = `
     <a href="/pages/contacts.html" class="btn btn-outline-secondary me-2"><i class="bi bi-arrow-left"></i> Back</a>
     <a href="/pages/labels.html?ids=${c._id}" class="btn btn-outline-primary me-2"><i class="bi bi-tag"></i> Print Label</a>
-    <button class="btn btn-primary" onclick="location.href='/pages/contacts.html';setTimeout(()=>editContact('${c._id}'),500)"><i class="bi bi-pencil"></i> Edit</button>`;
+    <a class="btn btn-primary" href="/pages/contacts.html?edit=${c._id}"><i class="bi bi-pencil"></i> Edit</a>`;
 
   document.getElementById('pageBody').innerHTML = `
     <div class="profile-header mb-4">

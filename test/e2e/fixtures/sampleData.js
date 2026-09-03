@@ -171,7 +171,9 @@ const dashboard = {
     birthdaysByMonth: [{ month: 'Sep', count: 1 }],
     contactsBySector: { Associates: 1 },
     contactsByReligion: { Hindu: 1 },
-    messagesByMonth: { '2026-09': 12 }
+    messagesByMonth: [
+      { month: '2026-09', email: 12, whatsapp: 4, sms: 0 }
+    ]
   },
   recentActivities: [{
     contactName: 'Asha Patil',
@@ -198,12 +200,14 @@ const settings = {
     port: 587,
     user: 'mailer@example.com',
     fromEmail: 'mailer@example.com',
-    fromName: 'RMS Test'
+    fromName: 'RMS Test',
+    configured: true
   },
   whatsapp: {
     apiUrl: 'https://graph.example.test/v1',
     phoneNumberId: 'phone-id',
-    businessAccountId: 'business-id'
+    businessAccountId: 'business-id',
+    configured: true
   },
   theme: { primaryColor: '#2563eb', darkMode: false },
   roles: [

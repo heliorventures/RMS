@@ -78,3 +78,20 @@ test('contact modal supports keyboard open, Escape close, and focus return', asy
   await expect(modal).not.toHaveClass(/show/);
   await expect(trigger).toBeFocused();
 });
+
+test('contact profile edit action opens the requested contact after navigation', async ({ rms }) => {
+  await rms.page.goto('/pages/contact-profile.html?id=507f1f77bcf86cd799439011');
+  await rms.page.getByRole('link', { name: 'Edit' }).click();
+
+  await expect(rms.page).toHaveURL(/\/pages\/contacts\.html\?edit=507f1f77bcf86cd799439011$/);
+  await expect(rms.page.locator('#contactModal')).toHaveClass(/show/);
+  await expect(rms.page.locator('#firstName')).toHaveValue('Asha');
+});
+
+test('campaign report action navigates to delivery filtered by campaign', async ({ rms }) => {
+  await rms.page.goto('/pages/campaigns.html');
+  await rms.page.getByRole('link', { name: 'View delivery report' }).click();
+
+  await expect(rms.page).toHaveURL(/\/pages\/delivery\.html\?campaignId=507f1f77bcf86cd799439014$/);
+  await expect.poll(() => rms.api.requests.some(request => request.method === 'GET' && request.pathname === '/api/delivery/jobs' && request.search.includes('campaignId=507f1f77bcf86cd799439014'))).toBe(true);
+});

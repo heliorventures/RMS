@@ -1,4 +1,5 @@
 const logger = require('../utils/logger');
+const { getSecretCipher } = require('../security/secretCipher');
 
 function isDryRun() {
   return process.env.DELIVERY_DRY_RUN === 'true';
@@ -11,7 +12,8 @@ async function sendWhatsApp({ settings, to, body }) {
   }
 
   const wa = settings?.whatsapp || {};
-  if (!wa.apiKey || !wa.phoneNumberId) {
+  const apiKey = typeof wa.apiKey === 'string' ? wa.apiKey : (wa.apiKey ? getSecretCipher().decrypt(wa.apiKey) : '');
+  if (!apiKey || !wa.phoneNumberId) {
     return { success: false, error: 'WhatsApp API not configured' };
   }
 
@@ -22,7 +24,7 @@ async function sendWhatsApp({ settings, to, body }) {
     const res = await fetch(url, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${wa.apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({

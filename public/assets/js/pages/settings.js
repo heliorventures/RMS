@@ -97,7 +97,7 @@ document.getElementById('pageBody').innerHTML = `
 
           <div class="col-md-6"><label class="form-label">Username</label><input class="form-control" id="smtpUser"></div>
 
-          <div class="col-md-6"><label class="form-label">Password</label><input class="form-control" id="smtpPass" type="password"></div>
+          <div class="col-md-6"><label class="form-label">Password</label><input class="form-control" id="smtpPass" type="password" placeholder="Leave blank to keep the stored credential"><small class="d-block text-secondary mt-1" id="smtpCredentialState" role="status"></small></div>
 
           <div class="col-md-6"><label class="form-label">From Email</label><input class="form-control" id="smtpFrom"></div>
 
@@ -115,7 +115,7 @@ document.getElementById('pageBody').innerHTML = `
 
           <div class="col-12"><label class="form-label">API URL</label><input class="form-control" id="waUrl" placeholder="https://graph.facebook.com/v18.0"></div>
 
-          <div class="col-md-6"><label class="form-label">API Key / Token</label><input class="form-control" id="waKey" type="password"></div>
+          <div class="col-md-6"><label class="form-label">API Key / Token</label><input class="form-control" id="waKey" type="password" placeholder="Leave blank to keep the stored credential"><small class="d-block text-secondary mt-1" id="whatsappCredentialState" role="status"></small></div>
 
           <div class="col-md-6"><label class="form-label">Phone Number ID</label><input class="form-control" id="waPhoneId"></div>
 
@@ -185,7 +185,7 @@ document.getElementById('pageBody').innerHTML = `
 
         <div class="mb-3"><label class="form-label">Email *</label><input type="email" class="form-control" id="userEmail" required></div>
 
-        <div class="mb-3"><label class="form-label" id="userPasswordLabel">Password *</label><input type="password" class="form-control" id="userPassword" minlength="6"><small class="text-secondary" id="userPasswordHint"></small></div>
+        <div class="mb-3"><label class="form-label" id="userPasswordLabel">Password *</label><input type="password" class="form-control" id="userPassword" minlength="12"><small class="text-secondary" id="userPasswordHint"></small></div>
 
         <div class="mb-3"><label class="form-label">Phone</label><input class="form-control" id="userPhone"></div>
 
@@ -253,13 +253,27 @@ async function loadSettings() {
 
   document.getElementById('smtpUser').value = smtp.user || '';
 
+  document.getElementById('smtpPass').value = '';
+
+  document.getElementById('smtpCredentialState').textContent = smtp.configured
+    ? 'Credential configured. Leave blank to keep it.'
+    : 'No credential configured.';
+
   document.getElementById('smtpFrom').value = smtp.fromEmail || '';
 
   document.getElementById('smtpFromName').value = smtp.fromName || '';
 
   document.getElementById('waUrl').value = wa.apiUrl || '';
 
+  document.getElementById('waKey').value = '';
+
+  document.getElementById('whatsappCredentialState').textContent = wa.configured
+    ? 'Credential configured. Leave blank to keep it.'
+    : 'No credential configured.';
+
   document.getElementById('waPhoneId').value = wa.phoneNumberId || '';
+
+  document.getElementById('waBusinessId').value = wa.businessAccountId || '';
 
   document.getElementById('themeColor').value = theme.primaryColor || '#2563eb';
 
@@ -377,7 +391,7 @@ window.openUserModal = () => {
 
   document.getElementById('userPassword').required = true;
 
-  document.getElementById('userPasswordHint').textContent = 'Minimum 6 characters';
+  document.getElementById('userPasswordHint').textContent = 'Minimum 12 characters';
 
   new bootstrap.Modal(document.getElementById('userModal')).show();
 
@@ -451,8 +465,8 @@ window.saveUser = async (button) => {
 
   }
 
-  if (!id && (!password || password.length < 6)) {
-    return RMS.mutations.showValidationError('#userForm', 'Password must be at least 6 characters', '#userPassword');
+  if (!id && (!password || password.length < 12)) {
+    return RMS.mutations.showValidationError('#userForm', 'Password must be at least 12 characters', '#userPassword');
 
   }
 
@@ -602,8 +616,18 @@ window.saveRole = async (button) => {
 
 function settingsPayload(section) {
   if (section === 'company') return { company: { name: document.getElementById('compName').value, email: document.getElementById('compEmail').value, phone: document.getElementById('compPhone').value, website: document.getElementById('compWebsite').value, address: document.getElementById('compAddress').value } };
-  if (section === 'smtp') return { smtp: { host: document.getElementById('smtpHost').value, port: +document.getElementById('smtpPort').value, user: document.getElementById('smtpUser').value, password: document.getElementById('smtpPass').value, fromEmail: document.getElementById('smtpFrom').value, fromName: document.getElementById('smtpFromName').value } };
-  if (section === 'whatsapp') return { whatsapp: { apiUrl: document.getElementById('waUrl').value, apiKey: document.getElementById('waKey').value, phoneNumberId: document.getElementById('waPhoneId').value, businessAccountId: document.getElementById('waBusinessId').value } };
+  if (section === 'smtp') {
+    const smtp = { host: document.getElementById('smtpHost').value, port: +document.getElementById('smtpPort').value, user: document.getElementById('smtpUser').value, fromEmail: document.getElementById('smtpFrom').value, fromName: document.getElementById('smtpFromName').value };
+    const password = document.getElementById('smtpPass').value;
+    if (password.trim()) smtp.password = password;
+    return { smtp };
+  }
+  if (section === 'whatsapp') {
+    const whatsapp = { apiUrl: document.getElementById('waUrl').value, phoneNumberId: document.getElementById('waPhoneId').value, businessAccountId: document.getElementById('waBusinessId').value };
+    const apiKey = document.getElementById('waKey').value;
+    if (apiKey.trim()) whatsapp.apiKey = apiKey;
+    return { whatsapp };
+  }
   if (section === 'theme') return { theme: { primaryColor: document.getElementById('themeColor').value, darkMode: document.getElementById('darkMode').checked }, autoBirthdayWish: document.getElementById('autoBirthday').checked, autoAnniversaryWish: document.getElementById('autoAnniversary').checked };
   throw new Error('Unknown settings section.');
 }
@@ -617,11 +641,24 @@ function settingsForm(section) {
   }[section];
 }
 
-window.saveSettings = (button, section) => RMS.mutations.runMutation(button, () => RMS.api.put('/settings', settingsPayload(section)), {
-  form: settingsForm(section),
-  pending: 'Saving…',
-  success: 'Settings saved successfully'
-});
+window.saveSettings = async (button, section) => {
+  const payload = settingsPayload(section);
+  const result = await RMS.mutations.runMutation(button, () => RMS.api.put('/settings', payload), {
+    form: settingsForm(section),
+    pending: 'Saving…',
+    success: 'Settings saved successfully'
+  });
+  if (!result.ok) return result;
+  if (section === 'smtp' && payload.smtp.password) {
+    document.getElementById('smtpPass').value = '';
+    document.getElementById('smtpCredentialState').textContent = 'Credential configured. Leave blank to keep it.';
+  }
+  if (section === 'whatsapp' && payload.whatsapp.apiKey) {
+    document.getElementById('waKey').value = '';
+    document.getElementById('whatsappCredentialState').textContent = 'Credential configured. Leave blank to keep it.';
+  }
+  return result;
+};
 
 window.testSmtp = (button) => RMS.mutations.runMutation(button, async () => {
   await RMS.api.put('/settings', settingsPayload('smtp'));

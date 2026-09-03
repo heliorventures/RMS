@@ -3,7 +3,6 @@ const { test, expect } = require('./fixtures/rmsTest');
 const { data, preparePage } = require('./fixtures/browserHarness');
 
 test('Login has no serious or critical axe violations', async ({ page }) => {
-  test.fail(true, 'Known login contrast debt is scheduled for Frontend Task 5');
   await preparePage(page, { authenticated: false });
   await page.goto('/index.html');
 

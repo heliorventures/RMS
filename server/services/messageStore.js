@@ -1,4 +1,5 @@
 const { v4: uuidv4 } = require('uuid');
+const { buildDueMessageFilter } = require('../time/schedule');
 const Message = require('../models/Message');
 const DeliveryJob = require('../models/DeliveryJob');
 const CommunicationHistory = require('../models/CommunicationHistory');
@@ -38,9 +39,10 @@ async function getJob(id) {
   return DeliveryJob.findById(id).lean();
 }
 
-async function listJobs({ page = 1, limit = 20 } = {}) {
-  const total = await DeliveryJob.countDocuments();
-  const data = await DeliveryJob.find().sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean();
+async function listJobs({ page = 1, limit = 20, campaignId } = {}) {
+  const query = campaignId ? { campaignId } : {};
+  const total = await DeliveryJob.countDocuments(query);
+  const data = await DeliveryJob.find(query).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean();
   return { data, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
 }
 
@@ -60,12 +62,7 @@ async function getMessage(id) {
 
 async function getPendingMessages(limit = 25) {
   const now = new Date();
-  const filter = {
-    status: { $in: ['pending', 'scheduled'] },
-    $or: [{ nextRetryAt: null }, { nextRetryAt: { $lte: now } }]
-  };
-
-  return Message.find(filter).sort({ createdAt: 1 }).limit(limit).lean();
+  return Message.find(buildDueMessageFilter(now)).sort({ scheduledAt: 1, createdAt: 1 }).limit(limit).lean();
 }
 
 async function getJobMessages(jobId, { status, page = 1, limit = 50 } = {}) {

@@ -54,6 +54,7 @@ function defaultResponse(method, pathname) {
   if (pathname === '/api/health') return { success: true, message: 'RMS API is running' };
   if (pathname === '/api/auth/login' && method === 'POST') return { success: true, token: 'e2e-token', user: data.user };
   if (pathname === '/api/auth/forgot-password' && method === 'POST') return { success: true, message: 'If the account exists, a reset link was sent.' };
+  if (pathname === '/api/auth/reset-password' && method === 'POST') return { success: true, message: 'Password reset successfully. Sign in with your new password.' };
   if (pathname === '/api/auth/profile') return { success: true, data: data.user };
   if (pathname === '/api/auth/change-password' && method === 'PUT') return { success: true, message: 'Password updated successfully.' };
   if (pathname === '/api/notifications') return { success: true, data: [data.notification] };
@@ -76,6 +77,14 @@ function defaultResponse(method, pathname) {
   if (pathname === '/api/festivals' && method === 'POST') return { success: true, data: data.festival, message: 'Festival created' };
   if (pathname === `/api/festivals/${data.ids.festival}`) return { success: true, data: data.festival };
   if (pathname === '/api/delivery/jobs' && method === 'GET') return { success: true, data: [data.job], pagination: { page: 1, limit: 30, total: 1, pages: 1 } };
+  if (pathname === '/api/delivery/capabilities' && method === 'GET') return {
+    success: true,
+    data: {
+      email: { enabled: true },
+      whatsapp: { enabled: true },
+      sms: { enabled: false, reason: 'SMS provider is not configured' }
+    }
+  };
   if (pathname === '/api/delivery/jobs' && method === 'POST') return { success: true, data: data.job, message: 'Delivery job queued' };
   if (pathname === `/api/delivery/jobs/${data.ids.job}`) return { success: true, data: data.job };
   if (pathname === `/api/delivery/jobs/${data.ids.job}/messages`) return { success: true, data: [data.message], pagination: { page: 1, limit: 100, total: 1, pages: 1 } };

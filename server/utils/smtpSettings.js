@@ -1,39 +1,48 @@
-const SMTP_FIELDS = ['host', 'port', 'user', 'password', 'fromEmail', 'fromName'];
+const SMTP_FIELDS = ['host', 'port', 'user', 'fromEmail', 'fromName'];
+const WHATSAPP_FIELDS = ['apiUrl', 'phoneNumberId', 'businessAccountId'];
 
-function buildSmtpSettingsUpdate(smtp) {
-  const update = {};
-  if (!smtp || typeof smtp !== 'object') return update;
+function hasStoredSecret(value) {
+  return typeof value === 'string' ? Boolean(value.trim()) : Boolean(value?.ciphertext);
+}
 
-  for (const field of SMTP_FIELDS) {
-    if (!Object.hasOwn(smtp, field)) continue;
-
-    const value = smtp[field];
-    if (field === 'password' && (typeof value !== 'string' || value.trim() === '')) {
-      continue;
-    }
-
-    update[`smtp.${field}`] = value;
+function copyFields(update, prefix, source, fields) {
+  if (!source || typeof source !== 'object') return;
+  for (const field of fields) {
+    if (Object.hasOwn(source, field)) update[`${prefix}.${field}`] = source[field];
   }
+}
 
+function buildProviderSettingsUpdate({ smtp, whatsapp } = {}, cipher) {
+  const update = {};
+  copyFields(update, 'smtp', smtp, SMTP_FIELDS);
+  copyFields(update, 'whatsapp', whatsapp, WHATSAPP_FIELDS);
+  if (typeof smtp?.password === 'string' && smtp.password.trim()) {
+    if (!cipher) throw new Error('Settings encryption is required before storing an SMTP credential.');
+    update['smtp.password'] = cipher.encrypt(smtp.password);
+  }
+  if (typeof whatsapp?.apiKey === 'string' && whatsapp.apiKey.trim()) {
+    if (!cipher) throw new Error('Settings encryption is required before storing a WhatsApp credential.');
+    update['whatsapp.apiKey'] = cipher.encrypt(whatsapp.apiKey);
+  }
   return update;
 }
 
-function sanitizeSettingsForUser(settings, user) {
-  const plainSettings = settings?.toObject ? settings.toObject() : settings;
-  if (user?.role === 'admin') {
-    if (!plainSettings?.smtp) return plainSettings;
-    const { password, ...smtp } = plainSettings.smtp;
-    return { ...plainSettings, smtp };
-  }
-
-  return {
-    company: plainSettings?.company,
-    labels: plainSettings?.labels,
-    theme: plainSettings?.theme ? {
-      primaryColor: plainSettings.theme.primaryColor,
-      darkMode: plainSettings.theme.darkMode
-    } : undefined
-  };
+function buildSmtpSettingsUpdate(smtp, cipher) {
+  return buildProviderSettingsUpdate({ smtp }, cipher);
 }
 
-module.exports = { buildSmtpSettingsUpdate, sanitizeSettingsForUser };
+function sanitizeSettingsForUser(settings, user) {
+  const plain = settings?.toObject ? settings.toObject() : settings;
+  if (user?.role !== 'admin') {
+    return {
+      company: plain?.company,
+      labels: plain?.labels,
+      theme: plain?.theme ? { primaryColor: plain.theme.primaryColor, darkMode: plain.theme.darkMode } : undefined
+    };
+  }
+  const { password, ...smtp } = plain?.smtp || {};
+  const { apiKey, ...whatsapp } = plain?.whatsapp || {};
+  return { ...plain, smtp: { ...smtp, configured: hasStoredSecret(password) }, whatsapp: { ...whatsapp, configured: hasStoredSecret(apiKey) } };
+}
+
+module.exports = { buildSmtpSettingsUpdate, buildProviderSettingsUpdate, sanitizeSettingsForUser, hasStoredSecret };

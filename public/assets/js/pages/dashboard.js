@@ -85,7 +85,7 @@ function quickAction(href, icon, label) {
 }
 function renderBirthdayList(list) {
   if (!list.length) return '<div class="empty-state py-4"><i class="bi bi-cake2 d-block"></i>No birthdays today</div>';
-  return list.map(c => `<div class="d-flex align-items-center gap-3 p-3 border-bottom"><div class="avatar">${RMS.utils.getInitials(c.firstName, c.lastName)}</div><div class="flex-grow-1"><div class="fw-semibold">${c.firstName} ${c.lastName}</div><small class="text-secondary">${RMS.utils.formatContactSubtitle(c)} · ${c.city || ''}</small></div><button class="btn btn-sm btn-primary"><i class="bi bi-send"></i></button></div>`).join('');
+  return list.map(c => `<div class="d-flex align-items-center gap-3 p-3 border-bottom"><div class="avatar">${RMS.utils.getInitials(c.firstName, c.lastName)}</div><div class="flex-grow-1"><div class="fw-semibold">${c.firstName} ${c.lastName}</div><small class="text-secondary">${RMS.utils.formatContactSubtitle(c)} · ${c.city || ''}</small></div><a class="btn btn-sm btn-primary" href="/pages/birthdays.html">View birthdays</a></div>`).join('');
 }
 function renderActivities(list) {
   if (!list.length) return '<div class="p-3 text-secondary small">No recent activity</div>';

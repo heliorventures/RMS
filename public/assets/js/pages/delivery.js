@@ -18,7 +18,7 @@ document.getElementById('pageBody').innerHTML = `
           <span><i class="bi bi-list-task me-2"></i>Delivery Jobs</span>
           <span class="badge bg-primary" id="jobCount">0</span>
         </div>
-        <div class="card-body p-0" id="jobsList" style="max-height:520px;overflow-y:auto">
+        <div class="card-body p-0" id="jobsList" style="max-height:520px;overflow-y:auto" tabindex="0" aria-label="Delivery jobs">
           <div class="p-4 text-secondary text-center">Loading jobs...</div>
         </div>
       </div>
@@ -37,7 +37,7 @@ document.getElementById('pageBody').innerHTML = `
         <div class="card-body">
           <div class="alert py-2 small d-none" id="retryStatus"></div>
           <div class="row g-2 mb-3" id="jobStats"></div>
-          <div class="progress mb-2" style="height:10px">
+          <div class="progress mb-2" style="height:10px" id="jobProgress" role="progressbar" aria-labelledby="jobProgressText" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
             <div class="progress-bar bg-success" id="progDelivered" style="width:0%"></div>
             <div class="progress-bar bg-danger" id="progFailed" style="width:0%"></div>
             <div class="progress-bar bg-warning" id="progPending" style="width:0%"></div>
@@ -48,6 +48,7 @@ document.getElementById('pageBody').innerHTML = `
       <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
           <span><i class="bi bi-envelope-check me-2"></i>Message Log</span>
+          <label class="visually-hidden" for="statusFilter">Filter messages by status</label>
           <select class="form-select form-select-sm w-auto" id="statusFilter" onchange="loadJobMessages()">
             <option value="">All statuses</option>
             <option value="pending">Pending</option>
@@ -89,14 +90,14 @@ async function loadJobs() {
         <div class="d-flex justify-content-between align-items-start">
           <div class="text-start">
             <div class="fw-semibold">${j.name}</div>
-            <small class="${activeJobId === j._id ? 'text-white-50' : 'text-secondary'}">${j.channel} · ${RMS.utils.formatDateTime(j.createdAt)}</small>
+            <small class="${activeJobId === j._id ? 'delivery-job-meta' : 'text-secondary'}">${j.channel} · ${RMS.utils.formatDateTime(j.createdAt)}</small>
           </div>
           ${RMS.utils.statusBadge(j.status)}
         </div>
-        <div class="progress mt-2" style="height:4px">
+        <div class="progress mt-2" style="height:4px" role="progressbar" aria-label="Delivery progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}">
           <div class="progress-bar ${activeJobId === j._id ? 'bg-light' : 'bg-primary'}" style="width:${pct}%"></div>
         </div>
-        <small class="${activeJobId === j._id ? 'text-white-50' : 'text-secondary'}">${s.delivered || 0} delivered · ${s.failed || 0} failed · ${s.pending || 0} pending</small>
+        <small class="${activeJobId === j._id ? 'delivery-job-meta' : 'text-secondary'}">${s.delivered || 0} delivered · ${s.failed || 0} failed · ${s.pending || 0} pending</small>
       </button>`;
   }).join('');
 
@@ -136,6 +137,8 @@ async function refreshJobDetail(id) {
     </div></div>`).join('');
 
   const total = s.total || 1;
+  const processedPercent = s.total ? Math.round(((s.processed || 0) / s.total) * 100) : 0;
+  document.getElementById('jobProgress').setAttribute('aria-valuenow', String(processedPercent));
   document.getElementById('progDelivered').style.width = `${((s.delivered || 0) / total) * 100}%`;
   document.getElementById('progFailed').style.width = `${((s.failed || 0) / total) * 100}%`;
   document.getElementById('progPending').style.width = `${((s.pending || 0) / total) * 100}%`;

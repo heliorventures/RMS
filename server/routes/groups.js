@@ -6,6 +6,7 @@ const router = express.Router();
 router.use(auth);
 
 router.get('/', groupController.getAll);
+router.get('/:id/members', groupController.getMembers);
 router.get('/:id', groupController.getById);
 router.post('/', groupController.create);
 router.put('/:id', groupController.update);

@@ -36,13 +36,13 @@ async function loadProfile(contactId) {
     </div>
 
     <ul class="nav nav-pills profile-tabs mb-4" role="tablist">
-      <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#info">Information</button></li>
-      <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#timeline">Timeline</button></li>
-      <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#communication">Communication</button></li>
+      <li class="nav-item" role="presentation"><button type="button" class="nav-link active" id="infoTab" role="tab" aria-controls="info" aria-selected="true" data-bs-toggle="pill" data-bs-target="#info">Information</button></li>
+      <li class="nav-item" role="presentation"><button type="button" class="nav-link" id="timelineTab" role="tab" aria-controls="timeline" aria-selected="false" data-bs-toggle="pill" data-bs-target="#timeline">Timeline</button></li>
+      <li class="nav-item" role="presentation"><button type="button" class="nav-link" id="communicationTab" role="tab" aria-controls="communication" aria-selected="false" data-bs-toggle="pill" data-bs-target="#communication">Communication</button></li>
     </ul>
 
     <div class="tab-content">
-      <div class="tab-pane fade show active" id="info">
+      <div class="tab-pane fade show active" id="info" role="tabpanel" aria-labelledby="infoTab">
         <div class="card"><div class="card-body">
           <div class="info-grid">
             ${infoItem('Gender', c.gender)} ${infoItem('Date of Birth', RMS.utils.formatDate(c.dob))}
@@ -56,13 +56,13 @@ async function loadProfile(contactId) {
           ${c.notes ? `<hr><h6>Notes</h6><p class="text-secondary">${c.notes}</p>` : ''}
         </div></div>
       </div>
-      <div class="tab-pane fade" id="timeline">
+      <div class="tab-pane fade" id="timeline" role="tabpanel" aria-labelledby="timelineTab">
         <div class="card"><div class="card-body"><div class="timeline">
           ${(c.timeline||[{action:'Created',description:'Contact profile created',date:c.createdAt,user:'System'}]).map(t => `
             <div class="timeline-item"><div class="fw-semibold">${t.action}</div><div class="text-secondary small">${t.description}</div><div class="time">${RMS.utils.formatDateTime(t.date)} · ${t.user||''}</div></div>`).join('')}
         </div></div></div>
       </div>
-      <div class="tab-pane fade" id="communication">
+      <div class="tab-pane fade" id="communication" role="tabpanel" aria-labelledby="communicationTab">
         <div class="card"><div class="card-body p-0">
           ${comm.length ? comm.map(h => `<div class="d-flex gap-3 p-3 border-bottom">
             <div class="stat-icon primary" style="width:36px;height:36px"><i class="bi bi-${h.type==='email'?'envelope':h.type==='whatsapp'?'whatsapp':'chat'}"></i></div>

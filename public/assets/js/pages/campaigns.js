@@ -58,7 +58,7 @@ async function loadCampaigns() {
       { data: 'stats', render: stats => stats?.sent || 0 },
       { data: 'stats', render: stats => stats?.delivered || 0 },
       { data: 'stats', render: stats => stats?.failed || 0 },
-      { data: null, orderable: false, render: campaign => `<a class="btn btn-sm btn-outline-primary" href="/pages/delivery.html?campaignId=${campaign._id}" aria-label="View delivery report"><i class="bi bi-bar-chart"></i></a> <button class="btn btn-sm btn-outline-danger" onclick="deleteCampaign('${campaign._id}')"><i class="bi bi-trash"></i></button>` }
+      { data: null, orderable: false, render: campaign => `<a class="btn btn-sm btn-outline-primary" href="/pages/delivery.html?campaignId=${campaign._id}" aria-label="View delivery report"><i class="bi bi-bar-chart"></i></a> <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteCampaign('${campaign._id}')" aria-label="Delete campaign"><i class="bi bi-trash"></i></button>` }
     ],
     pageLength: 10
   });

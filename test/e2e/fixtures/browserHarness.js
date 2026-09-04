@@ -65,8 +65,11 @@ function defaultResponse(method, pathname) {
   if (pathname === '/api/contacts' && method === 'POST') return { success: true, data: data.contact, message: 'Contact created successfully' };
   if (pathname === `/api/contacts/${data.ids.contact}`) return { success: true, data: data.contact };
   if (pathname === '/api/contacts/bulk-import' && method === 'POST') return { success: true, data: { inserted: 1, skipped: 0, errors: [] } };
+  if (pathname === '/api/contacts/bulk-lookup' && method === 'POST') return { success: true, data: [data.contact] };
   if (pathname === '/api/groups') return { success: true, data: [data.group] };
   if (pathname === `/api/groups/${data.ids.group}`) return { success: true, data: { group: data.group, members: [data.contact] } };
+  if (pathname === `/api/groups/${data.ids.group}/members`) return { success: true, data: [data.contact], pagination: { page: 1, limit: 100, total: 1, pages: 1 } };
+  if (pathname === '/api/exports/contacts' && method === 'POST') return { success: true, data: { id: 'export-job', status: 'ready', downloadUrl: '/api/exports/export-job/download' } };
   if (pathname === '/api/templates') return { success: true, data: [data.template] };
   if (pathname === '/api/campaigns' && method === 'GET') return { success: true, data: [data.campaign] };
   if (pathname === '/api/campaigns' && method === 'POST') return { success: true, data: data.campaign, message: 'Campaign created successfully' };

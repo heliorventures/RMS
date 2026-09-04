@@ -36,8 +36,8 @@ async function loadFestivals() {
       </div>
       <div class="card-footer bg-transparent d-flex gap-2">
         <button class="btn btn-sm btn-outline-primary flex-grow-1" onclick="editFestival('${f._id}')"><i class="bi bi-pencil"></i> Edit</button>
-        <button class="btn btn-sm btn-success" onclick="sendFestivalById('${f._id}', this)"><i class="bi bi-send"></i></button>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteFestival('${f._id}')"><i class="bi bi-trash"></i></button>
+        <button type="button" class="btn btn-sm btn-success" onclick="sendFestivalById('${f._id}', this)" aria-label="Send festival message"><i class="bi bi-send"></i></button>
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteFestival('${f._id}')" aria-label="Delete festival"><i class="bi bi-trash"></i></button>
       </div>
     </div></div>`).join('');
 }

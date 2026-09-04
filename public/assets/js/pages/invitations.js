@@ -12,8 +12,8 @@ document.getElementById('pageBody').innerHTML = `
         <div class="col-md-3"><label class="form-label">Date</label><input type="date" class="form-control" id="eventDate"></div>
         <div class="col-md-3"><label class="form-label">Time</label><input type="time" class="form-control" id="eventTime"></div>
         <div class="col-12"><label class="form-label">Google Maps Link</label><input class="form-control" id="eventMaps" placeholder="https://maps.google.com/..."></div>
-        <div class="col-md-6"><label class="form-label">Upload Image</label><input type="file" class="form-control" accept="image/*"></div>
-        <div class="col-md-6"><label class="form-label">Upload PDF</label><input type="file" class="form-control" accept=".pdf"></div>
+        <div class="col-md-6"><label class="form-label" for="eventImage">Upload Image</label><input type="file" class="form-control" id="eventImage" name="eventImage" accept="image/*"></div>
+        <div class="col-md-6"><label class="form-label" for="eventPdf">Upload PDF</label><input type="file" class="form-control" id="eventPdf" name="eventPdf" accept=".pdf"></div>
         <div class="col-md-6"><label class="form-label">Send via</label><select class="form-select" id="eventChannel"><option value="email">Email</option><option value="whatsapp">WhatsApp</option><option value="both">Both</option></select></div>
         <div class="col-md-6"><label class="form-label">Schedule</label><input type="datetime-local" class="form-control" id="eventSchedule"></div>
       </div>
@@ -42,9 +42,9 @@ async function loadEvents() {
       </div>
       <div class="card-footer bg-transparent d-flex gap-1">
         <button class="btn btn-sm btn-outline-primary flex-grow-1" onclick="editEvent('${e._id}')"><i class="bi bi-pencil"></i> Edit</button>
-        <button class="btn btn-sm btn-outline-secondary" onclick="previewEventData('${e._id}')"><i class="bi bi-eye"></i></button>
-        <button class="btn btn-sm btn-success" onclick="sendEventById('${e._id}', this)"><i class="bi bi-send"></i></button>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteEvent('${e._id}')"><i class="bi bi-trash"></i></button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="previewEventData('${e._id}')" aria-label="Preview invitation"><i class="bi bi-eye"></i></button>
+        <button type="button" class="btn btn-sm btn-success" onclick="sendEventById('${e._id}', this)" aria-label="Send invitation"><i class="bi bi-send"></i></button>
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteEvent('${e._id}')" aria-label="Delete invitation"><i class="bi bi-trash"></i></button>
       </div>
     </div></div>`).join('');
 }

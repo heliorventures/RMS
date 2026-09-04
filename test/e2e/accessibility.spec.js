@@ -9,7 +9,11 @@ test('Login has no serious or critical axe violations', async ({ page }) => {
   const result = await new AxeBuilder({ page }).analyze();
   const violations = result.violations
     .filter(violation => ['serious', 'critical'].includes(violation.impact))
-    .map(violation => ({ id: violation.id, impact: violation.impact, nodes: violation.nodes.length }));
+    .map(violation => ({
+      id: violation.id,
+      impact: violation.impact,
+      nodes: violation.nodes.map(node => ({ target: node.target, failureSummary: node.failureSummary }))
+    }));
 
   expect(violations, JSON.stringify(violations, null, 2)).toEqual([]);
 });
@@ -34,14 +38,17 @@ const pages = [
 
 for (const [path, name] of pages) {
   test(`${name} has no serious or critical axe violations`, async ({ rms }) => {
-    test.fail(true, 'Known accessibility debt is scheduled for Frontend Tasks 4 and 5');
     await rms.page.goto(path);
     await rms.page.locator('#pageBody').waitFor({ state: 'attached' });
 
     const result = await new AxeBuilder({ page: rms.page }).analyze();
     const violations = result.violations
       .filter(violation => ['serious', 'critical'].includes(violation.impact))
-      .map(violation => ({ id: violation.id, impact: violation.impact, nodes: violation.nodes.length }));
+      .map(violation => ({
+        id: violation.id,
+        impact: violation.impact,
+        nodes: violation.nodes.map(node => ({ target: node.target, failureSummary: node.failureSummary }))
+      }));
 
     expect(violations, JSON.stringify(violations, null, 2)).toEqual([]);
   });

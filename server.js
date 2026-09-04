@@ -78,6 +78,7 @@ app.use('/api/contacts', require('./server/routes/contacts'));
 app.use('/api/groups', require('./server/routes/groups'));
 app.use('/api/dashboard', require('./server/routes/dashboard'));
 app.use('/api/delivery', require('./server/routes/delivery'));
+app.use('/api/exports', require('./server/routes/exports'));
 app.use('/api', modulesRouter);
 app.use('/api', require('./server/routes/misc'));
 

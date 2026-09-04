@@ -68,16 +68,16 @@ document.getElementById('pageBody').innerHTML = `
           <div class="mb-3">
             <label class="form-label">To format</label>
             <textarea class="form-control font-monospace small" id="toFormat" rows="5" oninput="renderPreview()"></textarea>
-            <div class="mt-1">${TO_VARS.map(v => `<span class="var-chip" onclick="insertVar('toFormat','${v}')">${v}</span>`).join('')}</div>
+            <div class="mt-1">${TO_VARS.map(v => `<button type="button" class="var-chip" onclick="insertVar('toFormat','${v}')">${v}</button>`).join('')}</div>
           </div>
           <div class="mb-3">
             <label class="form-label">From format</label>
             <textarea class="form-control font-monospace small" id="fromFormat" rows="4" oninput="renderPreview()"></textarea>
-            <div class="mt-1">${FROM_VARS.map(v => `<span class="var-chip" onclick="insertVar('fromFormat','${v}')">${v}</span>`).join('')}</div>
+            <div class="mt-1">${FROM_VARS.map(v => `<button type="button" class="var-chip" onclick="insertVar('fromFormat','${v}')">${v}</button>`).join('')}</div>
           </div>
           <div class="form-check form-switch">
             <input class="form-check-input" type="checkbox" id="showBorder" checked onchange="renderPreview()">
-            <label class="form-check-label">Show label border (preview)</label>
+            <label class="form-check-label" for="showBorder">Show label border (preview)</label>
           </div>
         </div>
       </div>
@@ -92,9 +92,11 @@ document.getElementById('pageBody').innerHTML = `
         <div class="card-body">
           <div class="row g-2 mb-3">
             <div class="col-md-8">
+              <label class="visually-hidden" for="contactSearch">Search contacts</label>
               <input type="text" class="form-control" id="contactSearch" placeholder="Search by name, designation, company, city..." oninput="searchContacts()">
             </div>
             <div class="col-md-4">
+              <label class="visually-hidden" for="groupFilter">Add contacts from group</label>
               <select class="form-select" id="groupFilter" onchange="loadGroupContacts()">
                 <option value="">Add from group...</option>
               </select>
@@ -169,10 +171,8 @@ async function initLabels() {
 
   const ids = (RMS.utils.queryParams().ids || '').split(',').filter(Boolean);
   if (ids.length) {
-    for (const id of ids) {
-      const res = await RMS.api.get(`/contacts/${id}`);
-      if (res?.data) addContact(res.data);
-    }
+    const res = await RMS.api.post('/contacts/bulk-lookup', { ids });
+    (res?.data || []).forEach(addContact);
   }
 
   renderPreview();
@@ -464,7 +464,7 @@ function updateSelectedUI() {
   document.getElementById('selectedChips').innerHTML = selectedContacts.map(c => `
     <span class="selected-contact-chip">
       ${c.firstName} ${c.lastName}
-      <button type="button" onclick="removeContact('${c._id}')" title="Remove"><i class="bi bi-x"></i></button>
+      <button type="button" onclick="removeContact('${c._id}')" aria-label="Remove contact"><i class="bi bi-x"></i></button>
     </span>`).join('');
   renderPreview();
 }
@@ -527,7 +527,7 @@ window.pickContact = (c) => {
 window.loadGroupContacts = async () => {
   const groupId = document.getElementById('groupFilter').value;
   if (!groupId) return;
-  const res = await RMS.api.get(`/groups/${groupId}`);
+  const res = await RMS.api.get(`/groups/${groupId}/members?page=1&limit=100`);
   const members = res?.data?.members || [];
   members.slice(0, 100).forEach(addContact);
   if (members.length > 100) RMS.toast.show(`Added first 100 of ${members.length} group members`, 'info');

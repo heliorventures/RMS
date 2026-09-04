@@ -14,13 +14,8 @@ let activeGroupType = 'static';
 init();
 
 async function init() {
-  const [groupsRes, contactsRes] = await Promise.all([
-    RMS.api.get('/groups'),
-    RMS.api.get('/contacts?limit=500')
-  ]);
+  const groupsRes = await RMS.api.get('/groups');
   allGroups = groupsRes?.data || [];
-  allContacts = (contactsRes?.data || []).filter(Boolean);
-  enrichGroupCounts();
   renderGroups();
 
   document.getElementById('groupType').addEventListener('change', toggleGroupSections);
@@ -75,7 +70,7 @@ function mountGroupModals() {
   const root = document.createElement('div');
   root.id = 'groupModalsRoot';
   root.innerHTML = `
-    <div class="modal fade rms-modal" id="groupModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-hidden="true">
+    <div class="modal fade rms-modal" id="groupModal" tabindex="-1" data-bs-backdrop="static" aria-hidden="true" aria-labelledby="groupModalTitle">
       <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
         <div class="modal-content">
           <div class="modal-header gradient">
@@ -104,9 +99,9 @@ function mountGroupModals() {
                 <div class="col-12 d-none" id="rulesSection">
                   <label class="form-label">Smart Rule</label>
                   <div class="row g-2">
-                    <div class="col-md-4"><select class="form-select" id="ruleField"><option value="city">City</option><option value="sector">Sector</option><option value="religion">Religion</option><option value="status">Status</option></select></div>
-                    <div class="col-md-4"><select class="form-select" id="ruleOp"><option value="equals">Equals</option></select></div>
-                    <div class="col-md-4"><input class="form-control" id="ruleValue" placeholder="Value e.g. Pune"></div>
+                    <div class="col-md-4"><label class="form-label small" for="ruleField">Field</label><select class="form-select" id="ruleField"><option value="city">City</option><option value="sector">Sector</option><option value="religion">Religion</option><option value="status">Status</option></select></div>
+                    <div class="col-md-4"><label class="form-label small" for="ruleOp">Condition</label><select class="form-select" id="ruleOp"><option value="equals">Equals</option></select></div>
+                    <div class="col-md-4"><label class="form-label small" for="ruleValue">Value</label><input class="form-control" id="ruleValue" placeholder="For example, Pune"></div>
                   </div>
                 </div>
               </div>
@@ -120,7 +115,7 @@ function mountGroupModals() {
       </div>
     </div>
 
-    <div class="modal fade rms-modal" id="membersModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-hidden="true">
+    <div class="modal fade rms-modal" id="membersModal" tabindex="-1" data-bs-backdrop="static" aria-hidden="true" aria-labelledby="membersTitle">
       <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
         <div class="modal-content">
           <div class="modal-header gradient">
@@ -168,20 +163,23 @@ function renderGroups() {
     const count = getGroupMemberCount(g);
     return `
     <div class="col-md-4 col-lg-3">
-      <div class="group-card" onclick="viewMembers('${g._id}')">
-        <div class="d-flex align-items-center gap-3 mb-3">
-          <div class="group-icon" style="background:${g.color || '#2563eb'}"><i class="bi ${g.icon || 'bi-people'}"></i></div>
-          <div>
-            <div class="fw-bold">${g.name}</div>
-            <small class="text-secondary">${g.type === 'dynamic' ? 'Smart Group' : 'Custom Group'}</small>
+      <div class="group-card">
+        <button type="button" class="group-card-main" onclick="viewMembers('${g._id}')">
+          <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="group-icon" style="background:${g.color || '#2563eb'}"><i class="bi ${g.icon || 'bi-people'}"></i></div>
+            <div>
+              <div class="fw-bold">${g.name}</div>
+              <small class="text-secondary">${g.type === 'dynamic' ? 'Smart Group' : 'Custom Group'}</small>
+            </div>
           </div>
-        </div>
-        <p class="small text-secondary mb-2">${g.description || ''}</p>
+          <p class="small text-secondary mb-2">${g.description || ''}</p>
+          <span class="visually-hidden">View members</span>
+        </button>
         <div class="d-flex justify-content-between align-items-center">
           <span class="badge bg-primary-subtle text-primary">${count} member${count === 1 ? '' : 's'}</span>
-          <div class="btn-group btn-group-sm" onclick="event.stopPropagation()">
-            <button class="btn btn-outline-secondary" onclick="editGroup('${g._id}')" title="Edit"><i class="bi bi-pencil"></i></button>
-            <button class="btn btn-outline-danger" onclick="deleteGroup('${g._id}')" title="Delete"><i class="bi bi-trash"></i></button>
+          <div class="btn-group btn-group-sm">
+            <button type="button" class="btn btn-outline-secondary" onclick="editGroup('${g._id}')" aria-label="Edit group"><i class="bi bi-pencil"></i></button>
+            <button type="button" class="btn btn-outline-danger" onclick="deleteGroup('${g._id}')" aria-label="Delete group"><i class="bi bi-trash"></i></button>
           </div>
         </div>
       </div>
@@ -200,7 +198,7 @@ function renderMemberChips(containerId, ids, removable, removeFn = 'toggleMember
   if (!el) return;
   const list = [...ids].map(id => allContacts.find(c => String(c._id) === String(id))).filter(Boolean);
   el.innerHTML = list.length
-    ? list.map(c => `<span class="member-chip">${c.firstName} ${c.lastName}${removable ? `<button type="button" onclick="${removeFn}('${c._id}')" title="Remove">&times;</button>` : ''}</span>`).join('')
+    ? list.map(c => `<span class="member-chip">${c.firstName} ${c.lastName}${removable ? `<button type="button" onclick="${removeFn}('${c._id}')" aria-label="Remove member">&times;</button>` : ''}</span>`).join('')
     : '<span class="text-secondary small">No members</span>';
 }
 
@@ -212,14 +210,14 @@ function renderMemberPicker() {
   ).slice(0, 50);
   document.getElementById('memberPicker').innerHTML = filtered.length
     ? filtered.map(c => `
-      <div class="member-picker-item" onclick="toggleMember('${c._id}')">
+      <button type="button" class="member-picker-item" onclick="toggleMember('${c._id}')">
         <div class="avatar">${RMS.utils.getInitials(c.firstName, c.lastName)}</div>
         <div class="flex-grow-1">
           <div class="fw-semibold small">${c.firstName} ${c.lastName}</div>
           <div class="text-secondary" style="font-size:.75rem">${RMS.utils.formatContactSubtitle(c)}</div>
         </div>
         <i class="bi bi-plus-circle text-primary"></i>
-      </div>`).join('')
+      </button>`).join('')
     : '<div class="p-3 text-secondary small text-center">No contacts found</div>';
   renderMemberChips('selectedMemberChips', selectedMemberIds, true);
 }
@@ -232,14 +230,14 @@ function renderModalMemberPicker() {
   ).slice(0, 50);
   document.getElementById('modalMemberPicker').innerHTML = filtered.length
     ? filtered.map(c => `
-      <div class="member-picker-item" onclick="addMemberInModal('${c._id}')">
+      <button type="button" class="member-picker-item" onclick="addMemberInModal('${c._id}')">
         <div class="avatar">${RMS.utils.getInitials(c.firstName, c.lastName)}</div>
         <div class="flex-grow-1">
           <div class="fw-semibold small">${c.firstName} ${c.lastName}</div>
           <div class="text-secondary" style="font-size:.75rem">${RMS.utils.formatContactSubtitle(c)}</div>
         </div>
         <i class="bi bi-plus-circle text-primary"></i>
-      </div>`).join('')
+      </button>`).join('')
     : '<div class="p-3 text-secondary small text-center">No contacts to add</div>';
 }
 
@@ -386,13 +384,8 @@ window.saveGroup = async (button) => {
 };
 
 async function reloadGroups() {
-  const [groupsRes, contactsRes] = await Promise.all([
-    RMS.api.get('/groups'),
-    RMS.api.get('/contacts?limit=500')
-  ]);
+  const groupsRes = await RMS.api.get('/groups');
   allGroups = groupsRes?.data || [];
-  allContacts = (contactsRes?.data || []).filter(Boolean);
-  enrichGroupCounts();
   renderGroups();
 }
 

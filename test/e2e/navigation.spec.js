@@ -28,15 +28,12 @@ for (const [path, heading] of pages) {
 
 const keyboardTargets = [
   ['/pages/dashboard.html', '.user-menu', 'user menu'],
-  ['/pages/dashboard.html', '.notif-item', 'notification item'],
-  ['/pages/groups.html', '.group-card', 'group card'],
-  ['/pages/birthdays.html', '.calendar-day.has-event', 'calendar day'],
+  ['/pages/groups.html', '.group-card-main', 'group card'],
   ['/pages/labels.html', '.var-chip', 'label variable chip']
 ];
 
 for (const [path, selector, name] of keyboardTargets) {
   test(`${name} can be reached with the keyboard`, async ({ rms }) => {
-    test.fail(true, 'Known accessibility defect scheduled for Frontend Task 4');
     await rms.page.goto(path);
     const target = rms.page.locator(selector).first();
     await expect(target).toBeVisible();
@@ -50,6 +47,59 @@ for (const [path, selector, name] of keyboardTargets) {
     expect(reached).toBe(true);
   });
 }
+
+test('notification menu opens and its items are reachable with the keyboard', async ({ rms }) => {
+  await rms.page.goto('/pages/dashboard.html');
+  const trigger = rms.page.getByRole('button', { name: 'Notifications' });
+  await trigger.focus();
+  await rms.page.keyboard.press('Enter');
+
+  const target = rms.page.locator('.notif-item').first();
+  await expect(target).toBeVisible();
+  await rms.page.keyboard.press('Tab');
+  await expect(target).toBeFocused();
+});
+
+test('calendar tab and event date are reachable with the keyboard', async ({ rms }) => {
+  await rms.page.goto('/pages/birthdays.html');
+  const tab = rms.page.getByRole('tab', { name: 'Calendar' });
+  await tab.focus();
+  await rms.page.keyboard.press('Enter');
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
+
+  const target = rms.page.locator('.calendar-day.has-event').first();
+  await expect(target).toBeVisible();
+  let reached = false;
+  for (let index = 0; index < 50; index += 1) {
+    await rms.page.keyboard.press('Tab');
+    reached = await target.evaluate(element => document.activeElement === element);
+    if (reached) break;
+  }
+  expect(reached).toBe(true);
+});
+
+test('group card opens with Enter, closes with Escape, and returns focus', async ({ rms }) => {
+  await rms.page.goto('/pages/groups.html');
+  const trigger = rms.page.locator('.group-card-main').first();
+  await trigger.focus();
+  await rms.page.keyboard.press('Enter');
+  const modal = rms.page.locator('#membersModal');
+  await expect(modal).toHaveClass(/show/);
+  await expect(rms.page.locator('#modalMemberSearch')).toBeFocused();
+  await rms.page.keyboard.press('Escape');
+  await expect(modal).not.toHaveClass(/show/);
+  await expect(trigger).toBeFocused();
+});
+
+test('label variable chip inserts its value with Space', async ({ rms }) => {
+  await rms.page.goto('/pages/labels.html');
+  const chip = rms.page.locator('.var-chip').first();
+  const field = rms.page.locator('#toFormat');
+  const before = await field.inputValue();
+  await chip.focus();
+  await rms.page.keyboard.press('Space');
+  await expect(field).not.toHaveValue(before);
+});
 
 test('contact table actions can be reached with the keyboard', async ({ rms }) => {
   await rms.page.goto('/pages/contacts.html');
@@ -72,7 +122,12 @@ test('contact modal supports keyboard open, Escape close, and focus return', asy
   await rms.page.keyboard.press('Enter');
   const modal = rms.page.locator('#contactModal');
   await expect(modal).toHaveClass(/show/);
-  await expect(modal).toBeFocused();
+  await expect(rms.page.locator('#firstName')).toBeFocused();
+
+  await rms.page.keyboard.press('Shift+Tab');
+  expect(await modal.evaluate(element => element.contains(document.activeElement))).toBe(true);
+  await rms.page.getByText('First Name *', { exact: true }).click();
+  await expect(rms.page.locator('#firstName')).toBeFocused();
 
   await rms.page.keyboard.press('Escape');
   await expect(modal).not.toHaveClass(/show/);

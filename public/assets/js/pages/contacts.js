@@ -49,7 +49,7 @@ document.getElementById('pageBody').innerHTML = `
             <li>Upload the CSV file — supports 50,000+ contacts via batch import</li>
           </ol>
           <div class="mb-3">
-            <label class="form-label">Select CSV file</label>
+            <label class="form-label" for="bulkCsvFile">Select CSV file</label>
             <input type="file" class="form-control" id="bulkCsvFile" accept=".csv,text/csv">
           </div>
           <div id="bulkUploadProgress" class="d-none">
@@ -57,7 +57,7 @@ document.getElementById('pageBody').innerHTML = `
               <span id="bulkUploadStatus">Uploading...</span>
               <span id="bulkUploadPercent">0%</span>
             </div>
-            <div class="progress mb-2" style="height:8px">
+            <div class="progress mb-2" style="height:8px" role="progressbar" aria-labelledby="bulkUploadStatus" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="bulkUploadProgressBar">
               <div class="progress-bar progress-bar-striped progress-bar-animated" id="bulkUploadBar" style="width:0%"></div>
             </div>
             <p class="small text-secondary mb-0" id="bulkUploadDetail"></p>
@@ -136,7 +136,7 @@ function buildContactRow(c) {
     c.sector || '-',
     c.religion || '-',
     RMS.utils.statusBadge(c.status),
-    `<div class="btn-group btn-group-sm"><a href="/pages/contact-profile.html?id=${c._id}" class="btn btn-outline-primary" title="View"><i class="bi bi-eye"></i></a><a href="/pages/labels.html?ids=${c._id}" class="btn btn-outline-secondary" title="Print label"><i class="bi bi-tag"></i></a><button class="btn btn-outline-secondary" onclick="editContact('${c._id}')"><i class="bi bi-pencil"></i></button><button class="btn btn-outline-danger" onclick="deleteContact('${c._id}')"><i class="bi bi-trash"></i></button></div>`
+    `<div class="btn-group btn-group-sm"><a href="/pages/contact-profile.html?id=${c._id}" class="btn btn-outline-primary" aria-label="View contact"><i class="bi bi-eye"></i></a><a href="/pages/labels.html?ids=${c._id}" class="btn btn-outline-secondary" aria-label="Print contact label"><i class="bi bi-tag"></i></a><button type="button" class="btn btn-outline-secondary" onclick="editContact('${c._id}')" aria-label="Edit contact"><i class="bi bi-pencil"></i></button><button type="button" class="btn btn-outline-danger" onclick="deleteContact('${c._id}')" aria-label="Delete contact"><i class="bi bi-trash"></i></button></div>`
   ];
 }
 
@@ -275,16 +275,17 @@ window.applyFilters = () => {
 };
 
 window.exportContacts = async () => {
-  RMS.toast.show('Preparing export...', 'info');
-  const params = new URLSearchParams({ page: 1, limit: 50000, sort: 'firstName', order: 'asc' });
-  Object.entries(activeFilters).forEach(([k, v]) => { if (v) params.set(k, v); });
-  const res = await RMS.api.get(`/contacts?${params}`);
-  const rows = res?.data || [];
-  RMS.utils.downloadCSV('contacts.csv', [
-    ['First Name','Last Name','Designation','Company','Mobile','Email','City','Sector','Religion','Status'],
-    ...rows.map(c => [c.firstName, c.lastName, c.designation, c.company, c.mobile, c.email, c.city, c.sector, c.religion, c.status])
-  ]);
-  RMS.toast.show(`Exported ${rows.length.toLocaleString()} contacts`);
+  RMS.toast.show('Preparing export…', 'info');
+  const res = await RMS.api.post('/exports/contacts', { filters: activeFilters });
+  const downloadUrl = res?.data?.downloadUrl;
+  if (!downloadUrl) return RMS.toast.show('Could not prepare the export. Please try again.', 'error');
+  const link = document.createElement('a');
+  link.href = downloadUrl;
+  link.download = 'contacts.csv';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  RMS.toast.show('Your export is downloading', 'success');
 };
 
 window.startBulkUpload = async (button) => {
@@ -314,6 +315,7 @@ window.startBulkUpload = async (button) => {
       const batch = rows.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);
       const pct = Math.round(((i + 1) / batches) * 100);
       document.getElementById('bulkUploadBar').style.width = `${pct}%`;
+      document.getElementById('bulkUploadProgressBar').setAttribute('aria-valuenow', String(pct));
       document.getElementById('bulkUploadPercent').textContent = `${pct}%`;
       document.getElementById('bulkUploadStatus').textContent = `Importing batch ${i + 1} of ${batches}...`;
       document.getElementById('bulkUploadDetail').textContent = `${imported.toLocaleString()} of ${total.toLocaleString()} contacts processed`;
@@ -345,5 +347,6 @@ document.getElementById('bulkUploadModal')?.addEventListener('hidden.bs.modal', 
   document.getElementById('bulkUploadProgress')?.classList.add('d-none');
   document.getElementById('bulkUploadResult')?.classList.add('d-none');
   document.getElementById('bulkUploadBar').style.width = '0%';
+  document.getElementById('bulkUploadProgressBar')?.setAttribute('aria-valuenow', '0');
   document.getElementById('bulkUploadBar').classList.add('progress-bar-animated');
 });

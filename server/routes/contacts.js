@@ -10,6 +10,7 @@ router.get('/', contactController.getAll);
 router.get('/birthdays', contactController.getBirthdays);
 router.get('/anniversaries', contactController.getAnniversaries);
 router.post('/bulk-import', contactController.bulkImport);
+router.post('/bulk-lookup', contactController.bulkLookup);
 router.get('/:id', contactController.getById);
 router.post('/', upload.single('photo'), contactController.create);
 router.put('/:id', upload.single('photo'), contactController.update);

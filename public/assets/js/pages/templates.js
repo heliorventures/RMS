@@ -3,16 +3,16 @@ document.getElementById('pageActions').innerHTML = `<button class="btn btn-prima
 document.getElementById('pageBody').innerHTML = `
   <div class="card mb-4"><div class="card-body">
     <h6 class="mb-2">Reusable Variables</h6>
-    <span class="var-chip" onclick="insertVar('Name')">{{Name}}</span>
-    <span class="var-chip" onclick="insertVar('City')">{{City}}</span>
-    <span class="var-chip" onclick="insertVar('Sector')">{{Sector}}</span>
-    <span class="var-chip" onclick="insertVar('Birthday')">{{Birthday}}</span>
-    <span class="var-chip" onclick="insertVar('Company')">{{Company}}</span>
-    <span class="var-chip" onclick="insertVar('Designation')">{{Designation}}</span>
-    <span class="var-chip" onclick="insertVar('Occupation')">{{Occupation}}</span>
-    <span class="var-chip" onclick="insertVar('EventTitle')">{{EventTitle}}</span>
+    <button type="button" class="var-chip" onclick="insertVar('Name')">{{Name}}</button>
+    <button type="button" class="var-chip" onclick="insertVar('City')">{{City}}</button>
+    <button type="button" class="var-chip" onclick="insertVar('Sector')">{{Sector}}</button>
+    <button type="button" class="var-chip" onclick="insertVar('Birthday')">{{Birthday}}</button>
+    <button type="button" class="var-chip" onclick="insertVar('Company')">{{Company}}</button>
+    <button type="button" class="var-chip" onclick="insertVar('Designation')">{{Designation}}</button>
+    <button type="button" class="var-chip" onclick="insertVar('Occupation')">{{Occupation}}</button>
+    <button type="button" class="var-chip" onclick="insertVar('EventTitle')">{{EventTitle}}</button>
   </div></div>
-  <ul class="nav nav-pills mb-4" id="typeTabs"></ul>
+  <ul class="nav nav-pills mb-4" id="typeTabs" aria-label="Filter templates by type"></ul>
   <div class="row g-3" id="templateGrid"></div>
   <div class="modal fade" id="templateModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
     <div class="modal-header gradient"><h5 class="modal-title">Template Editor</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
@@ -31,7 +31,7 @@ document.getElementById('pageBody').innerHTML = `
 const TYPES = ['all','birthday','anniversary','festival','invitation','email','whatsapp'];
 let allTemplates = [], activeType = 'all';
 
-document.getElementById('typeTabs').innerHTML = TYPES.map(t => `<li class="nav-item"><button class="nav-link ${t==='all'?'active':''}" onclick="filterType('${t}')">${t==='all'?'All':t.charAt(0).toUpperCase()+t.slice(1)}</button></li>`).join('');
+document.getElementById('typeTabs').innerHTML = TYPES.map(t => `<li class="nav-item"><button type="button" class="nav-link ${t==='all'?'active':''}" aria-pressed="${t === 'all'}" onclick="filterType('${t}')">${t==='all'?'All':t.charAt(0).toUpperCase()+t.slice(1)}</button></li>`).join('');
 loadTemplates();
 
 async function loadTemplates() {
@@ -47,10 +47,18 @@ function renderTemplates() {
       <div class="card-body"><p class="small fw-semibold">${t.subject||''}</p><pre class="small bg-light p-3 rounded" style="white-space:pre-wrap">${t.body}</pre>
       <div>${(t.variables||[]).map(v=>`<span class="var-chip">{{${v}}}</span>`).join('')}</div></div>
       <div class="card-footer bg-transparent"><button class="btn btn-sm btn-outline-primary" onclick="editTemplate('${t._id}')"><i class="bi bi-pencil"></i> Edit</button>
-      <button class="btn btn-sm btn-outline-danger" onclick="deleteTemplate('${t._id}')"><i class="bi bi-trash"></i></button></div>
+      <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteTemplate('${t._id}')" aria-label="Delete template"><i class="bi bi-trash"></i></button></div>
     </div></div>`).join('');
 }
-window.filterType = (t) => { activeType = t; document.querySelectorAll('#typeTabs .nav-link').forEach((el,i) => el.classList.toggle('active', TYPES[i]===t)); renderTemplates(); };
+window.filterType = (t) => {
+  activeType = t;
+  document.querySelectorAll('#typeTabs .nav-link').forEach((el, i) => {
+    const selected = TYPES[i] === t;
+    el.classList.toggle('active', selected);
+    el.setAttribute('aria-pressed', String(selected));
+  });
+  renderTemplates();
+};
 window.openTemplateModal = () => { document.getElementById('templateForm').reset(); document.getElementById('templateId').value=''; };
 window.insertVar = (v) => { const body = document.getElementById('tmplBody'); if(body){ body.value += `{{${v}}}`; body.focus(); } else RMS.toast.show(`Variable {{${v}}} copied`,'info'); };
 window.saveTemplate = async (button) => {

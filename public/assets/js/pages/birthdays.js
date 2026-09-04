@@ -5,19 +5,19 @@ document.getElementById('pageActions').innerHTML = `
 
 document.getElementById('pageBody').innerHTML = `
   <ul class="nav nav-tabs mb-4" role="tablist">
-    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#today">Today's Birthdays</button></li>
-    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#upcoming">Upcoming</button></li>
-    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#calendar">Calendar</button></li>
-    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#templates">Templates</button></li>
+    <li class="nav-item" role="presentation"><button type="button" class="nav-link active" id="todayTab" role="tab" aria-controls="today" aria-selected="true" data-bs-toggle="tab" data-bs-target="#today">Today's Birthdays</button></li>
+    <li class="nav-item" role="presentation"><button type="button" class="nav-link" id="upcomingTab" role="tab" aria-controls="upcoming" aria-selected="false" data-bs-toggle="tab" data-bs-target="#upcoming">Upcoming</button></li>
+    <li class="nav-item" role="presentation"><button type="button" class="nav-link" id="calendarTab" role="tab" aria-controls="calendar" aria-selected="false" data-bs-toggle="tab" data-bs-target="#calendar">Calendar</button></li>
+    <li class="nav-item" role="presentation"><button type="button" class="nav-link" id="templatesTab" role="tab" aria-controls="templates" aria-selected="false" data-bs-toggle="tab" data-bs-target="#templates">Templates</button></li>
   </ul>
   <div class="tab-content">
-    <div class="tab-pane fade show active" id="today"><div class="row g-3" id="todayGrid"></div></div>
-    <div class="tab-pane fade" id="upcoming"><div class="card"><div class="card-body"><table class="table" id="upcomingTable"><thead><tr><th>Contact</th><th>Designation</th><th>DOB</th><th>City</th><th>Days Left</th><th>Actions</th></tr></thead><tbody></tbody></table></div></div></div>
-    <div class="tab-pane fade" id="calendar"><div class="card"><div class="card-body">
+    <div class="tab-pane fade show active" id="today" role="tabpanel" aria-labelledby="todayTab"><div class="row g-3" id="todayGrid"></div></div>
+    <div class="tab-pane fade" id="upcoming" role="tabpanel" aria-labelledby="upcomingTab"><div class="card"><div class="card-body"><table class="table" id="upcomingTable"><caption class="visually-hidden">Upcoming birthdays</caption><thead><tr><th>Contact</th><th>Designation</th><th>DOB</th><th>City</th><th>Days Left</th><th>Actions</th></tr></thead><tbody></tbody></table></div></div></div>
+    <div class="tab-pane fade" id="calendar" role="tabpanel" aria-labelledby="calendarTab"><div class="card"><div class="card-body">
       <div class="d-flex justify-content-between align-items-center mb-3">
-        <button class="btn btn-sm btn-outline-primary" onclick="changeMonth(-1)"><i class="bi bi-chevron-left"></i></button>
+        <button type="button" class="btn btn-sm btn-outline-primary" onclick="changeMonth(-1)" aria-label="Previous month"><i class="bi bi-chevron-left"></i></button>
         <h5 id="calMonth" class="mb-0 fw-bold"></h5>
-        <button class="btn btn-sm btn-outline-primary" onclick="changeMonth(1)"><i class="bi bi-chevron-right"></i></button>
+        <button type="button" class="btn btn-sm btn-outline-primary" onclick="changeMonth(1)" aria-label="Next month"><i class="bi bi-chevron-right"></i></button>
       </div>
       <div class="calendar-grid mb-3" id="calendarGrid"></div>
       <div class="d-flex gap-3 small text-secondary mb-3 flex-wrap">
@@ -26,10 +26,10 @@ document.getElementById('pageBody').innerHTML = `
       </div>
       <div id="calendarMonthList"></div>
     </div></div></div>
-    <div class="tab-pane fade" id="templates"><div class="row g-3" id="templateGrid"></div></div>
+    <div class="tab-pane fade" id="templates" role="tabpanel" aria-labelledby="templatesTab"><div class="row g-3" id="templateGrid"></div></div>
   </div>
-  <div class="modal fade" id="wishModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
-    <div class="modal-header gradient"><h5 class="modal-title">Send Birthday Wish</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal fade" id="wishModal" tabindex="-1" aria-labelledby="wishModalTitle"><div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header gradient"><h5 class="modal-title" id="wishModalTitle">Send Birthday Wish</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
     <div class="modal-body" id="birthdayWishForm">
       <div class="mb-3"><label class="form-label">Channel</label><select class="form-select" id="wishChannel"><option value="email">Email</option><option value="whatsapp">WhatsApp</option><option value="both">Both</option></select></div>
       <div class="mb-3"><label class="form-label">Template</label><select class="form-select" id="wishTemplate"></select></div>
@@ -42,21 +42,20 @@ let allContacts = [], calDate = new Date(), birthdayTemplates = [], todayBirthda
 init();
 
 async function init() {
-  const [todayRes, upcomingRes, tmplRes, contactsRes] = await Promise.all([
+  const [todayRes, upcomingRes, tmplRes] = await Promise.all([
     RMS.api.get('/contacts/birthdays?type=today'),
     RMS.api.get('/contacts/birthdays?type=upcoming'),
-    RMS.api.get('/templates'),
-    RMS.api.get('/contacts?limit=500')
+    RMS.api.get('/templates')
   ]);
-  allContacts = (contactsRes?.data || []).filter(c => c.dob);
   const today = todayRes?.data || [];
   todayBirthdays = today;
   const upcoming = upcomingRes?.data || [];
+  allContacts = [...today, ...upcoming].filter(c => c.dob);
 
   document.getElementById('todayGrid').innerHTML = today.length ? today.map(c => birthdayCard(c)).join('') : '<div class="col-12"><div class="empty-state"><i class="bi bi-cake2 d-block"></i>No birthdays today</div></div>';
   document.querySelector('#upcomingTable tbody').innerHTML = upcoming.map(c => {
     const days = daysUntil(c.dob);
-    return `<tr><td><div class="d-flex align-items-center gap-2"><div class="avatar">${RMS.utils.getInitials(c.firstName,c.lastName)}</div>${c.firstName} ${c.lastName}</div></td><td>${c.designation || '-'}</td><td>${RMS.utils.formatDate(c.dob)}</td><td>${c.city || '-'}</td><td><span class="badge bg-primary">${days} days</span></td><td><button class="btn btn-sm btn-primary" onclick="sendBirthdayWish('${c._id}', undefined, this)"><i class="bi bi-send"></i></button></td></tr>`;
+    return `<tr><td><div class="d-flex align-items-center gap-2"><div class="avatar">${RMS.utils.getInitials(c.firstName,c.lastName)}</div>${c.firstName} ${c.lastName}</div></td><td>${c.designation || '-'}</td><td>${RMS.utils.formatDate(c.dob)}</td><td>${c.city || '-'}</td><td><span class="badge bg-primary">${days} days</span></td><td><button type="button" class="btn btn-sm btn-primary" onclick="sendBirthdayWish('${c._id}', undefined, this)" aria-label="Send birthday wish"><i class="bi bi-send"></i></button></td></tr>`;
   }).join('') || '<tr><td colspan="6" class="text-center text-secondary">No upcoming birthdays</td></tr>';
 
   const templates = (tmplRes?.data || []).filter(t => t.type === 'birthday');
@@ -129,10 +128,10 @@ function renderCalendar() {
     const bdayList = birthdayMap[d] || [];
     const hasEvent = bdayList.length > 0;
     const title = hasEvent ? bdayList.map(c => `${c.firstName} ${c.lastName}`).join(', ') : '';
-    html += `<div class="calendar-day ${isToday ? 'today' : ''} ${hasEvent ? 'has-event' : ''}" title="${title}" onclick="showDayBirthdays(${d})">
+    html += `<button type="button" class="calendar-day ${isToday ? 'today' : ''} ${hasEvent ? 'has-event' : ''}" title="${title}" aria-label="${monthLabel.textContent} ${d}${hasEvent ? `, ${bdayList.length} birthday${bdayList.length === 1 ? '' : 's'}` : ', no birthdays'}" onclick="showDayBirthdays(${d})">
       <span class="day-num">${d}</span>
       ${hasEvent ? `<span class="day-count">${bdayList.length}</span>` : ''}
-    </div>`;
+    </button>`;
   }
 
   grid.innerHTML = html;
@@ -152,7 +151,7 @@ function renderCalendar() {
                  <div class="fw-semibold small">${c.firstName} ${c.lastName}</div>
                  <div class="text-secondary" style="font-size:.75rem">${RMS.utils.formatDate(c.dob)} · ${RMS.utils.formatContactSubtitle(c)}</div>
                </div>
-               <button class="btn btn-sm btn-outline-primary" onclick="sendBirthdayWish('${c._id}', undefined, this)"><i class="bi bi-send"></i></button>
+               <button type="button" class="btn btn-sm btn-outline-primary" onclick="sendBirthdayWish('${c._id}', undefined, this)" aria-label="Send birthday wish"><i class="bi bi-send"></i></button>
              </div>
            </div>`).join('')}</div>`
       : `<div class="empty-state py-3"><i class="bi bi-calendar-x d-block"></i>No birthdays in ${monthLabel.textContent}</div>`;

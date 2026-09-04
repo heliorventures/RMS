@@ -1,15 +1,21 @@
 .label-format-panel .var-chip {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
   font-size: .7rem;
   padding: .15rem .45rem;
   margin: .15rem .15rem 0 0;
   border-radius: 999px;
   background: var(--bg-secondary, #f1f5f9);
-  color: var(--primary, #2563eb);
+  color: #1e3a8a;
   cursor: pointer;
+  touch-action: manipulation;
   border: 1px solid rgba(37, 99, 235, .2);
 }
 .label-format-panel .var-chip:hover { background: rgba(37, 99, 235, .1); }
+[data-theme="dark"] .label-format-panel .var-chip { background: #1e293b; color: #bfdbfe; border-color: rgba(147, 197, 253, .5); }
 
 .label-preview-wrap {
   background: #e2e8f0;
@@ -103,6 +109,8 @@
 .selected-contact-chip button {
   border: none;
   background: none;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
   line-height: 1;
   color: #64748b;
@@ -111,9 +119,14 @@
 
 .contact-pick-item {
   cursor: pointer;
-  transition: background .15s;
+  transition: background-color .15s ease;
 }
 .contact-pick-item:hover { background: rgba(37, 99, 235, .06); }
+
+@media (max-width: 575.98px) {
+  .label-preview-wrap { min-height: 0; padding: 1rem; }
+  .label-sheet-preview { gap: 8px; }
+}
 
 /* Off-screen / PDF render area */
 #printArea { display: none; }

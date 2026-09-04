@@ -79,7 +79,7 @@ document.getElementById('pageBody').innerHTML = `
 
           <div class="col-12"><label class="form-label">Address</label><textarea class="form-control" id="compAddress" rows="2"></textarea></div>
 
-          <div class="col-12"><label class="form-label">Logo</label><input type="file" class="form-control" accept="image/*"></div>
+          <div class="col-12"><label class="form-label" for="companyLogo">Logo</label><input type="file" class="form-control" id="companyLogo" name="companyLogo" accept="image/*"></div>
 
           <div class="col-12"><button type="button" class="btn btn-primary" onclick="saveSettings(this, 'company')">Save Company Details</button></div>
 
@@ -349,11 +349,11 @@ function renderUsers() {
 
         <td class="text-end">
 
-          <button class="btn btn-sm btn-outline-primary me-1" onclick="editUser('${u._id}')"><i class="bi bi-pencil"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="editUser('${u._id}')" aria-label="Edit user"><i class="bi bi-pencil"></i></button>
 
           ${currentUser?._id !== u._id && u.isActive !== false
 
-            ? `<button class="btn btn-sm btn-outline-danger" onclick="deactivateUser('${u._id}')"><i class="bi bi-person-x"></i></button>`
+            ? `<button type="button" class="btn btn-sm btn-outline-danger" onclick="deactivateUser('${u._id}')" aria-label="Deactivate user"><i class="bi bi-person-x"></i></button>`
 
             : ''}
 

@@ -1,6 +1,33 @@
 const Group = require('../models/Group');
 const Contact = require('../models/Contact');
 
+const GROUP_RULE_FIELDS = new Set(['city', 'sector', 'religion', 'status', 'gender', 'occupation', 'company', 'designation']);
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function memberQuery(group) {
+  const filter = {};
+  const excluded = (group.excludedMembers || []).filter(Boolean);
+  if (excluded.length) filter._id = { $nin: excluded };
+  if (group.type === 'dynamic') {
+    const rules = (group.rules || []).filter(rule => GROUP_RULE_FIELDS.has(rule.field));
+    const clauses = rules.map(rule => {
+      if (rule.operator === 'contains') return { [rule.field]: { $regex: escapeRegex(rule.value || ''), $options: 'i' } };
+      if (rule.operator === 'in' && Array.isArray(rule.value)) return { [rule.field]: { $in: rule.value } };
+      if (rule.operator === 'not_in' && Array.isArray(rule.value)) return { [rule.field]: { $nin: rule.value } };
+      return { [rule.field]: rule.value };
+    });
+    if (clauses.length) filter.$and = clauses;
+  } else if (group.members?.length) {
+    filter._id = { ...(filter._id || {}), $in: group.members };
+  } else {
+    filter.groups = group._id;
+  }
+  return filter;
+}
+
 function matchRule(contact, rule) {
   const val = contact[rule.field];
   switch (rule.operator) {
@@ -37,14 +64,8 @@ function resolveMembers(group, allContacts) {
 
 async function syncContactGroups(groupId, memberIds) {
   const ids = (memberIds || []).map(String);
-  const contacts = await Contact.find();
-  await Promise.all(contacts.map(async (c) => {
-    const set = new Set((c.groups || []).map(String));
-    if (ids.includes(String(c._id))) set.add(String(groupId));
-    else set.delete(String(groupId));
-    c.groups = [...set];
-    await c.save();
-  }));
+  await Contact.updateMany({ groups: groupId, _id: { $nin: ids } }, { $pull: { groups: groupId } });
+  if (ids.length) await Contact.updateMany({ _id: { $in: ids } }, { $addToSet: { groups: groupId } });
 }
 
 function withMemberCount(group, allContacts) {
@@ -54,10 +75,27 @@ function withMemberCount(group, allContacts) {
 }
 
 const groupController = {
+  async getMembers(req, res) {
+    try {
+      const group = await Group.findById(req.params.id);
+      if (!group) return res.status(404).json({ success: false, message: 'Group not found.' });
+      const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+      const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 25));
+      const query = memberQuery(group);
+      const total = await Contact.countDocuments(query);
+      const members = await Contact.find(query).sort({ firstName: 1, _id: 1 }).skip((page - 1) * limit).limit(limit).lean();
+      res.json({ success: true, data: members, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  },
+
   async getAll(req, res) {
     try {
-      const contacts = await Contact.find();
-      const groups = (await Group.find().sort({ name: 1 })).map(g => withMemberCount(g, contacts));
+      const groups = await Group.find().sort({ name: 1 }).lean();
+      await Promise.all(groups.map(async group => {
+        group.memberCount = await Contact.countDocuments(memberQuery(group));
+      }));
       res.json({ success: true, data: groups });
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });

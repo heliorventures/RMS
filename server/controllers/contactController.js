@@ -1,6 +1,14 @@
 const Contact = require('../models/Contact');
 const contactImport = require('../utils/contactImport');
 
+const MAX_PAGE_SIZE = 100;
+
+function pageRequest(query, fallbackLimit = 25) {
+  const page = Math.max(1, Number.parseInt(query.page, 10) || 1);
+  const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number.parseInt(query.limit, 10) || fallbackLimit));
+  return { page, limit };
+}
+
 function buildContactFilter(query) {
   const filter = {};
   if (query.city) filter.city = query.city;
@@ -14,7 +22,8 @@ function buildContactFilter(query) {
 const contactController = {
   async getAll(req, res) {
     try {
-      const { page = 1, limit = 10, sort = 'firstName', order = 'asc', search = '', ...filters } = req.query;
+      const { sort = 'firstName', order = 'asc', search = '', ...filters } = req.query;
+      const { page, limit } = pageRequest(req.query);
       const q = {};
       if (search) {
         q.$or = [
@@ -32,8 +41,9 @@ const contactController = {
       const data = await Contact.find(q)
         .sort({ [sort]: order === 'asc' ? 1 : -1 })
         .skip((page - 1) * limit)
-        .limit(Number(limit));
-      res.json({ success: true, data, pagination: { page: +page, limit: +limit, total, pages: Math.ceil(total / limit) } });
+        .limit(limit)
+        .lean();
+      res.json({ success: true, data, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
     }
@@ -85,8 +95,9 @@ const contactController = {
   async getBirthdays(req, res) {
     try {
       const { type = 'today' } = req.query;
+      const { page, limit } = pageRequest(req.query);
       const today = new Date();
-      const contacts = await Contact.find({ dob: { $exists: true } });
+      const contacts = await Contact.find({ dob: { $exists: true } }).lean();
 
       const filtered = contacts.filter(c => {
         const dob = new Date(c.dob);
@@ -97,7 +108,8 @@ const contactController = {
         return diff > 0 && diff <= 30;
       });
 
-      res.json({ success: true, data: filtered });
+      const total = filtered.length;
+      res.json({ success: true, data: filtered.slice((page - 1) * limit, page * limit), pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
     }
@@ -144,6 +156,19 @@ const contactController = {
       });
 
       res.json({ success: true, data: filtered });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+  ,
+
+  async bulkLookup(req, res) {
+    try {
+      const ids = [...new Set((req.body?.ids || []).filter(id => typeof id === 'string'))].slice(0, 500);
+      if (!ids.length) return res.status(400).json({ success: false, message: 'At least one contact ID is required.' });
+      const contacts = await Contact.find({ _id: { $in: ids } }).lean();
+      const byId = new Map(contacts.map(contact => [String(contact._id), contact]));
+      res.json({ success: true, data: ids.map(id => byId.get(id)).filter(Boolean) });
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
     }

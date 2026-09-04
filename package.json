@@ -7,6 +7,8 @@
     "start": "node server.js",
     "dev": "node server.js",
     "test": "node --test test/*.test.js",
+    "build:assets": "node scripts/build-assets.mjs",
+    "check": "npm run build:assets && node --check server.js",
     "test:unit": "node --test test/*.test.js",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",

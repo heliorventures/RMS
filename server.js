@@ -63,7 +63,8 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use('/dist', express.static(path.join(__dirname, 'public', 'dist'), { immutable: true, maxAge: '1y' }));
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: 0, etag: true }));
 
 app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'RMS API is running', mode: 'mongodb' });

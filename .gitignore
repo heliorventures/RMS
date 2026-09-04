@@ -9,4 +9,5 @@ public/uploads/*
 !public/uploads/.gitkeep
 .DS_Store
 playwright-report/
+public/dist/
 test-results/

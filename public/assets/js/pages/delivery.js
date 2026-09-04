@@ -4,6 +4,7 @@ let activeJobId = null;
 let pollTimer = null;
 let messagePage = 1;
 let pollInFlight = false;
+const deliveryUrl = RMS.urlState;
 
 document.getElementById('pageActions').innerHTML = `
   <button class="btn btn-outline-secondary" onclick="loadJobs()"><i class="bi bi-arrow-clockwise me-1"></i> Refresh</button>`;
@@ -111,11 +112,16 @@ async function loadJobs() {
       </button>`;
   }).join('');
 
-  if (!activeJobId && jobs[0]) void window.selectJob(jobs[0]._id);
+  if (!activeJobId) {
+    const requestedJob = deliveryUrl.read(deliveryUrl.keys.job);
+    void window.selectJob(jobs.some(job => job._id === requestedJob) ? requestedJob : jobs[0]?._id);
+  }
 }
 
 window.selectJob = async (id) => {
+  if (!id) return;
   activeJobId = id;
+  deliveryUrl.set({ job: id }, { replace: true });
   messagePage = 1;
   await Promise.all([refreshJobDetail(id), loadJobMessages()]);
   await loadJobs();

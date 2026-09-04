@@ -40,6 +40,9 @@ document.getElementById('pageBody').innerHTML = `
 
 let allContacts = [], calDate = new Date(), birthdayTemplates = [], todayBirthdays = [];
 let birthdayCountsByDay = {};
+const birthdayUrl = RMS.urlState;
+const requestedMonth = birthdayUrl.read(birthdayUrl.keys.month);
+if (/^\d{4}-\d{2}$/.test(requestedMonth)) calDate = new Date(`${requestedMonth}-01T00:00:00`);
 init();
 
 async function init() {
@@ -110,7 +113,7 @@ function daysUntil(dob) {
   if (next < today) next.setFullYear(today.getFullYear()+1);
   return Math.ceil((next-today)/86400000);
 }
-window.changeMonth = (dir) => { calDate.setMonth(calDate.getMonth() + dir); loadCalendar(); };
+window.changeMonth = (dir) => { calDate.setMonth(calDate.getMonth() + dir); birthdayUrl.set({ month: calDate.toISOString().slice(0, 7) }); loadCalendar(); };
 
 function renderCalendar() {
   const grid = document.getElementById('calendarGrid');

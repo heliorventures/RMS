@@ -118,11 +118,16 @@ let table;
 let totalContacts = 0;
 let activeFilters = { city: '', sector: '', religion: '', status: '' };
 let requestedEditOpened = false;
+const contactUrl = RMS.urlState;
 
 ['city','filterCity'].forEach(id => { const el = document.getElementById(id); if (el) CITIES.forEach(c => { el.innerHTML += `<option>${c}</option>`; }); });
 ['sector','filterSector'].forEach(id => { const el = document.getElementById(id); if (el) SECTORS.forEach(s => { el.innerHTML += `<option>${s}</option>`; }); });
 ['religion','filterReligion'].forEach(id => { const el = document.getElementById(id); if (el) RELIGIONS.forEach(r => { el.innerHTML += `<option>${r}</option>`; }); });
 
+['city', 'sector', 'religion', 'status'].forEach(key => {
+  activeFilters[key] = contactUrl.read(contactUrl.keys[key]);
+  document.getElementById(`filter${key[0].toUpperCase()}${key.slice(1)}`).value = activeFilters[key];
+});
 initContactsTable();
 updateContactTotal();
 
@@ -190,7 +195,7 @@ function initContactsTable() {
     }
   });
 
-  const search = RMS.utils.queryParams().search;
+  const search = contactUrl.read(contactUrl.keys.search);
   if (search) table.search(search).draw();
 }
 
@@ -271,8 +276,17 @@ window.applyFilters = () => {
     religion: document.getElementById('filterReligion').value,
     status: document.getElementById('filterStatus').value
   };
+  contactUrl.set({ ...activeFilters, [contactUrl.keys.page]: null });
   reloadTable();
 };
+
+contactUrl.onPopState(() => {
+  ['city', 'sector', 'religion', 'status'].forEach(key => {
+    activeFilters[key] = contactUrl.read(contactUrl.keys[key]);
+    document.getElementById(`filter${key[0].toUpperCase()}${key.slice(1)}`).value = activeFilters[key];
+  });
+  reloadTable();
+});
 
 window.exportContacts = async () => {
   RMS.toast.show('Preparing export…', 'info');

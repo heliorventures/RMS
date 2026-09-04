@@ -29,9 +29,10 @@ document.getElementById('pageBody').innerHTML = `
   </div></div></div>`;
 
 const TYPES = ['all','birthday','anniversary','festival','invitation','email','whatsapp'];
-let allTemplates = [], activeType = 'all';
+let allTemplates = [], activeType = RMS.urlState.read(RMS.urlState.keys.tab, 'all');
+if (!TYPES.includes(activeType)) activeType = 'all';
 
-document.getElementById('typeTabs').innerHTML = TYPES.map(t => `<li class="nav-item"><button type="button" class="nav-link ${t==='all'?'active':''}" aria-pressed="${t === 'all'}" onclick="filterType('${t}')">${t==='all'?'All':t.charAt(0).toUpperCase()+t.slice(1)}</button></li>`).join('');
+document.getElementById('typeTabs').innerHTML = TYPES.map(t => `<li class="nav-item"><button type="button" class="nav-link ${t===activeType?'active':''}" aria-pressed="${t === activeType}" onclick="filterType('${t}')">${t==='all'?'All':t.charAt(0).toUpperCase()+t.slice(1)}</button></li>`).join('');
 loadTemplates();
 
 async function loadTemplates() {
@@ -58,6 +59,7 @@ window.filterType = (t) => {
     el.setAttribute('aria-pressed', String(selected));
   });
   renderTemplates();
+  RMS.urlState.set({ tab: t });
 };
 window.openTemplateModal = () => { document.getElementById('templateForm').reset(); document.getElementById('templateId').value=''; };
 window.insertVar = (v) => { const body = document.getElementById('tmplBody'); if(body){ body.value += `{{${v}}}`; body.focus(); } else RMS.toast.show(`Variable {{${v}}} copied`,'info'); };

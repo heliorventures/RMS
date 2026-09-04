@@ -13,6 +13,7 @@ let activeGroupId = null;
 let activeGroupType = 'static';
 let activeMembers = [];
 let activeMemberPagination = { page: 1, pages: 1, total: 0 };
+const groupsUrl = RMS.urlState;
 
 init();
 
@@ -20,6 +21,8 @@ async function init() {
   const groupsRes = await RMS.api.get('/groups');
   allGroups = groupsRes?.data || [];
   renderGroups();
+  const requestedGroup = groupsUrl.read('group');
+  if (allGroups.some(group => group._id === requestedGroup)) window.viewMembers(requestedGroup);
 
   document.getElementById('groupType').addEventListener('change', toggleGroupSections);
   document.getElementById('memberSearch').addEventListener('input', RMS.utils.debounce(() => searchMembers('group'), 250));
@@ -450,6 +453,7 @@ async function reloadGroups() {
 
 window.viewMembers = async (id) => {
   activeGroupId = id;
+  groupsUrl.set({ group: id }, { replace: true });
   const res = await RMS.requests.run('groups:members', ({ signal }) =>
     RMS.api.get(`/groups/${id}?page=1&limit=100`, { signal })
   );

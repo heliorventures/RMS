@@ -15,6 +15,16 @@ document.getElementById('pageBody').innerHTML = `
     <div class="tab-pane fade" id="delivery"><div class="card"><div class="card-body"><table class="table" id="deliveryTable"><thead><tr><th>Type</th><th>Contact</th><th>Status</th><th>Sent At</th></tr></thead><tbody></tbody></table></div></div></div>
   </div>`;
 
+const reportsUrl = RMS.urlState;
+const reportTab = reportsUrl.read(reportsUrl.keys.tab, 'contacts');
+if (['contacts', 'birthday', 'campaign', 'delivery'].includes(reportTab) && reportTab !== 'contacts') {
+  const button = document.querySelector(`[data-bs-target="#${reportTab}"]`);
+  if (button) bootstrap.Tab.getOrCreateInstance(button).show();
+}
+document.querySelectorAll('[data-bs-toggle="tab"]').forEach(button => button.addEventListener('shown.bs.tab', () => {
+  reportsUrl.set({ tab: button.dataset.bsTarget.slice(1) }, { replace: true });
+}));
+
 initReports();
 async function initReports() {
   let contactReport, birthdayReport, campaignReport, deliveryReport;

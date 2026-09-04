@@ -39,7 +39,10 @@ async function searchMembers(target) {
     memberSearchResults = [];
     return target === 'group' ? renderMemberPicker() : renderModalMemberPicker();
   }
-  const res = await RMS.api.get(`/contacts?page=1&limit=25&search=${encodeURIComponent(query)}`);
+  const res = await RMS.requests.run(`groups:member-search:${target}`, ({ signal }) =>
+    RMS.api.get(`/contacts?page=1&limit=25&search=${encodeURIComponent(query)}`, { signal })
+  );
+  if (!res) return;
   memberSearchResults = res?.data || [];
   rememberContacts(memberSearchResults);
   return target === 'group' ? renderMemberPicker() : renderModalMemberPicker();
@@ -330,7 +333,10 @@ function renderMembersPager() {
 }
 
 async function loadMembersPage(page) {
-  const res = await RMS.api.get(`/groups/${activeGroupId}?page=${page}&limit=100`);
+  const res = await RMS.requests.run('groups:members', ({ signal }) =>
+    RMS.api.get(`/groups/${activeGroupId}?page=${page}&limit=100`, { signal })
+  );
+  if (!res) return;
   const { group, members, pagination } = res?.data || {};
   if (!group?._id) return RMS.toast.show('Group members could not be loaded', 'error');
   activeMembers = members || [];
@@ -360,7 +366,10 @@ window.openGroupModal = async () => {
 
 window.editGroup = async (id) => {
   let group = allGroups.find(g => g._id === id);
-  const res = await RMS.api.get(`/groups/${id}?page=1&limit=100`);
+  const res = await RMS.requests.run('groups:members', ({ signal }) =>
+    RMS.api.get(`/groups/${id}?page=1&limit=100`, { signal })
+  );
+  if (!res) return;
   const members = res?.data?.members || [];
   group = res?.data?.group || group;
   if (!group?._id) return RMS.toast.show('Group not found', 'error');
@@ -441,7 +450,10 @@ async function reloadGroups() {
 
 window.viewMembers = async (id) => {
   activeGroupId = id;
-  const res = await RMS.api.get(`/groups/${id}?page=1&limit=100`);
+  const res = await RMS.requests.run('groups:members', ({ signal }) =>
+    RMS.api.get(`/groups/${id}?page=1&limit=100`, { signal })
+  );
+  if (!res) return;
   const { group, members } = res?.data || { group: {}, members: [] };
   if (!group?._id) return RMS.toast.show('Group not found', 'error');
 

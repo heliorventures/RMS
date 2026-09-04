@@ -3,6 +3,7 @@ RMS.components.initLayout('/pages/delivery.html', 'Delivery Tracking', 'Home / D
 let activeJobId = null;
 let pollTimer = null;
 let messagePage = 1;
+let pollInFlight = false;
 
 document.getElementById('pageActions').innerHTML = `
   <button class="btn btn-outline-secondary" onclick="loadJobs()"><i class="bi bi-arrow-clockwise me-1"></i> Refresh</button>`;
@@ -79,7 +80,10 @@ async function loadJobs() {
   const params = new URLSearchParams({ limit: 30 });
   const campaignId = RMS.utils.queryParams().campaignId;
   if (campaignId) params.set('campaignId', campaignId);
-  const res = await RMS.api.get(`/delivery/jobs?${params}`);
+  const res = await RMS.requests.run('delivery:jobs', ({ signal }) =>
+    RMS.api.get(`/delivery/jobs?${params}`, { signal })
+  );
+  if (!res) return;
   const jobs = res?.data || [];
   document.getElementById('jobCount').textContent = jobs.length;
 
@@ -107,21 +111,22 @@ async function loadJobs() {
       </button>`;
   }).join('');
 
-  if (!activeJobId && jobs[0]) selectJob(jobs[0]._id);
-  else if (activeJobId) refreshJobDetail(activeJobId);
+  if (!activeJobId && jobs[0]) void window.selectJob(jobs[0]._id);
 }
 
 window.selectJob = async (id) => {
   activeJobId = id;
   messagePage = 1;
-  await refreshJobDetail(id);
-  await loadJobMessages();
-  loadJobs();
+  await Promise.all([refreshJobDetail(id), loadJobMessages()]);
+  await loadJobs();
   startPolling();
 };
 
 async function refreshJobDetail(id) {
-  const res = await RMS.api.get(`/delivery/jobs/${id}`);
+  const res = await RMS.requests.run('delivery:job-detail', ({ signal }) =>
+    RMS.api.get(`/delivery/jobs/${id}`, { signal })
+  );
+  if (!res || id !== activeJobId) return;
   const job = res?.data;
   if (!job) return;
 
@@ -157,7 +162,11 @@ async function loadJobMessages() {
   const status = document.getElementById('statusFilter').value;
   const params = new URLSearchParams({ page: messagePage, limit: 100 });
   if (status) params.set('status', status);
-  const res = await RMS.api.get(`/delivery/jobs/${activeJobId}/messages?${params}`);
+  const requestedJobId = activeJobId;
+  const res = await RMS.requests.run('delivery:messages', ({ signal }) =>
+    RMS.api.get(`/delivery/jobs/${requestedJobId}/messages?${params}`, { signal })
+  );
+  if (!res || requestedJobId !== activeJobId) return;
   const rows = res?.data || [];
   const pagination = res?.pagination || { page: messagePage, pages: 1, total: rows.length };
   document.getElementById('messagesBody').innerHTML = rows.length
@@ -200,18 +209,37 @@ window.retryFailed = async (button) => {
     }
   );
   if (!result.ok) return;
-  await refreshJobDetail(activeJobId);
-  loadJobMessages();
-  loadJobs();
+  await Promise.all([refreshJobDetail(activeJobId), loadJobMessages(), loadJobs()]);
 };
 
 function startPolling() {
-  if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(async () => {
-    if (!activeJobId) return;
-    await refreshJobDetail(activeJobId);
-    loadJobMessages();
-  }, 5000);
+  stopPolling();
+  if (document.hidden || !activeJobId) return;
+  pollTimer = setInterval(() => { void pollActiveJob(); }, 5000);
 }
+
+function stopPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = null;
+}
+
+async function pollActiveJob() {
+  if (pollInFlight || document.hidden || !activeJobId) return;
+  pollInFlight = true;
+  try {
+    await Promise.all([refreshJobDetail(activeJobId), loadJobMessages()]);
+  } finally {
+    pollInFlight = false;
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return stopPolling();
+  if (!activeJobId) return;
+  void pollActiveJob();
+  startPolling();
+});
+
+window.addEventListener('beforeunload', stopPolling);
 
 window.loadJobs = loadJobs;

@@ -2,7 +2,8 @@ RMS.components.initLayout('/pages/dashboard.html', 'Dashboard', 'Home / Dashboar
 document.getElementById('pageBody').innerHTML = RMS.components.renderSkeletonCards(8);
 
 (async function init() {
-  const res = await RMS.api.get('/dashboard/stats');
+  const res = await RMS.requests.run('dashboard:stats', ({ signal }) => RMS.api.get('/dashboard/stats', { signal }));
+  if (!res) return;
   const d = res?.data || {};
   const s = d.stats || {};
 

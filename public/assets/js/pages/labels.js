@@ -495,7 +495,10 @@ const searchContacts = RMS.utils.debounce(async () => {
     box.innerHTML = '';
     return;
   }
-  const res = await RMS.api.get(`/contacts?page=1&limit=15&search=${encodeURIComponent(q)}`);
+  const res = await RMS.requests.run('labels:contact-search', ({ signal }) =>
+    RMS.api.get(`/contacts?page=1&limit=15&search=${encodeURIComponent(q)}`, { signal })
+  );
+  if (!res) return;
   const list = res?.data || [];
   searchResultCache = list;
   box.innerHTML = list.length
@@ -527,10 +530,14 @@ window.pickContact = (c) => {
 window.loadGroupContacts = async () => {
   const groupId = document.getElementById('groupFilter').value;
   if (!groupId) return;
-  const res = await RMS.api.get(`/groups/${groupId}/members?page=1&limit=100`);
-  const members = res?.data?.members || [];
+  const res = await RMS.requests.run('labels:group-members', ({ signal }) =>
+    RMS.api.get(`/groups/${groupId}/members?page=1&limit=100`, { signal })
+  );
+  if (!res) return;
+  const members = res?.data || [];
   members.slice(0, 100).forEach(addContact);
-  if (members.length > 100) RMS.toast.show(`Added first 100 of ${members.length} group members`, 'info');
+  const total = res?.pagination?.total || members.length;
+  if (total > members.length) RMS.toast.show(`Added first ${members.length} of ${total} group members`, 'info');
   else RMS.toast.show(`Added ${members.length} contacts from group`);
   document.getElementById('groupFilter').value = '';
 };

@@ -19,10 +19,12 @@ initReports();
 async function initReports() {
   let contactReport, birthdayReport, campaignReport, deliveryReport;
   try {
-    [contactReport, birthdayReport, campaignReport, deliveryReport] = await Promise.all([
-      RMS.api.get('/reports/contacts'), RMS.api.get('/reports/birthdays'),
-      RMS.api.get('/reports/campaigns'), RMS.api.get('/reports/delivery')
-    ]);
+    const reports = await RMS.requests.run('reports:initial', ({ signal }) => Promise.all([
+      RMS.api.get('/reports/contacts', { signal }), RMS.api.get('/reports/birthdays', { signal }),
+      RMS.api.get('/reports/campaigns', { signal }), RMS.api.get('/reports/delivery', { signal })
+    ]));
+    if (!reports) return;
+    [contactReport, birthdayReport, campaignReport, deliveryReport] = reports;
   } catch (error) {
     const target = document.getElementById('reportsError');
     target.textContent = error.message || 'Reports could not be loaded.';

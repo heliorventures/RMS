@@ -70,7 +70,10 @@ async function init() {
 
 async function loadCalendar() {
   const month = calDate.getMonth() + 1;
-  const res = await RMS.api.get(`/contacts/birthdays/calendar?month=${month}`);
+  const res = await RMS.requests.run('birthdays:calendar', ({ signal }) =>
+    RMS.api.get(`/contacts/birthdays/calendar?month=${month}`, { signal })
+  );
+  if (!res) return;
   birthdayCountsByDay = Object.fromEntries((res?.data || []).map(entry => [entry.day, entry.count]));
   renderCalendar();
 }
@@ -175,7 +178,10 @@ window.showDayBirthdays = async (day) => {
   if (!count) return;
   const monthList = document.getElementById('calendarMonthList');
   monthList.innerHTML = '<div class="text-secondary small py-2">Loading birthdays…</div>';
-  const res = await RMS.api.get(`/contacts/birthdays/calendar?month=${calDate.getMonth() + 1}&day=${day}&page=1&limit=100`);
+  const res = await RMS.requests.run('birthdays:day', ({ signal }) =>
+    RMS.api.get(`/contacts/birthdays/calendar?month=${calDate.getMonth() + 1}&day=${day}&page=1&limit=100`, { signal })
+  );
+  if (!res) return;
   const contacts = res?.data || [];
   const label = `${calDate.toLocaleString('en', { month: 'long' })} ${day}`;
   monthList.innerHTML = contacts.length

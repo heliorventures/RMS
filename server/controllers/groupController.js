@@ -2,6 +2,7 @@ const Group = require('../models/Group');
 const Contact = require('../models/Contact');
 
 const GROUP_RULE_FIELDS = new Set(['city', 'sector', 'religion', 'status', 'gender', 'occupation', 'company', 'designation']);
+const MAX_MEMBER_PAGE_SIZE = 100;
 
 function escapeRegex(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -28,38 +29,18 @@ function memberQuery(group) {
   return filter;
 }
 
-function matchRule(contact, rule) {
-  const val = contact[rule.field];
-  switch (rule.operator) {
-    case 'equals':
-      if (val == null || rule.value == null) return false;
-      if (['city', 'sector', 'religion', 'status'].includes(rule.field)) {
-        return String(val).toLowerCase() === String(rule.value).toLowerCase();
-      }
-      return val === rule.value;
-    case 'contains': return String(val).toLowerCase().includes(String(rule.value).toLowerCase());
-    case 'in': return Array.isArray(rule.value) && rule.value.includes(val);
-    case 'not_in': return Array.isArray(rule.value) && !rule.value.includes(val);
-    default: return true;
-  }
+function pageRequest(query) {
+  const page = Math.max(1, Number.parseInt(query.page, 10) || 1);
+  const limit = Math.min(MAX_MEMBER_PAGE_SIZE, Math.max(1, Number.parseInt(query.limit, 10) || 25));
+  return { page, limit };
 }
 
-function applyRules(contacts, rules) {
-  if (!rules || !rules.length) return contacts;
-  return contacts.filter(contact => rules.every(rule => matchRule(contact, rule)));
-}
-
-function resolveMembers(group, allContacts) {
-  const excluded = new Set((group.excludedMembers || []).map(String));
-  let members;
-  if (group.type === 'dynamic') members = applyRules(allContacts, group.rules);
-  else if (group.members && group.members.length) {
-    const ids = group.members.map(String);
-    members = allContacts.filter(c => ids.includes(String(c._id)));
-  } else {
-    members = allContacts.filter(c => (c.groups || []).map(String).includes(String(group._id)));
-  }
-  return members.filter(c => !excluded.has(String(c._id)));
+async function memberPage(group, query) {
+  const { page, limit } = pageRequest(query);
+  const filter = memberQuery(group);
+  const total = await Contact.countDocuments(filter);
+  const members = await Contact.find(filter).sort({ firstName: 1, _id: 1 }).skip((page - 1) * limit).limit(limit).lean();
+  return { members, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
 }
 
 async function syncContactGroups(groupId, memberIds) {
@@ -68,127 +49,81 @@ async function syncContactGroups(groupId, memberIds) {
   if (ids.length) await Contact.updateMany({ _id: { $in: ids } }, { $addToSet: { groups: groupId } });
 }
 
-function withMemberCount(group, allContacts) {
-  const obj = group.toObject ? group.toObject() : { ...group };
-  obj.memberCount = resolveMembers(obj, allContacts).length;
-  return obj;
+async function responseGroup(group) {
+  const data = group.toObject ? group.toObject() : { ...group };
+  data.memberCount = await Contact.countDocuments(memberQuery(data));
+  return data;
 }
 
 const groupController = {
   async getMembers(req, res) {
     try {
-      const group = await Group.findById(req.params.id);
+      const group = await Group.findById(req.params.id).lean();
       if (!group) return res.status(404).json({ success: false, message: 'Group not found.' });
-      const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
-      const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 25));
-      const query = memberQuery(group);
-      const total = await Contact.countDocuments(query);
-      const members = await Contact.find(query).sort({ firstName: 1, _id: 1 }).skip((page - 1) * limit).limit(limit).lean();
-      res.json({ success: true, data: members, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
-    } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
-    }
+      const { members, pagination } = await memberPage(group, req.query);
+      res.json({ success: true, data: members, pagination });
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
   },
 
   async getAll(req, res) {
     try {
       const groups = await Group.find().sort({ name: 1 }).lean();
-      await Promise.all(groups.map(async group => {
-        group.memberCount = await Contact.countDocuments(memberQuery(group));
-      }));
+      await Promise.all(groups.map(async group => { group.memberCount = await Contact.countDocuments(memberQuery(group)); }));
       res.json({ success: true, data: groups });
-    } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
-    }
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
   },
 
   async getById(req, res) {
     try {
-      const group = await Group.findById(req.params.id);
+      const group = await Group.findById(req.params.id).lean();
       if (!group) return res.status(404).json({ success: false, message: 'Group not found.' });
-      const contacts = await Contact.find();
-      const members = resolveMembers(group, contacts);
-      const enriched = withMemberCount(group, contacts);
-      res.json({ success: true, data: { group: enriched, members } });
-    } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
-    }
+      const { members, pagination } = await memberPage(group, req.query);
+      group.memberCount = pagination.total;
+      res.json({ success: true, data: { group, members, pagination } });
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
   },
 
   async create(req, res) {
     try {
       const data = { ...req.body };
-      if (data.memberIds) {
-        data.members = data.memberIds;
-        data.memberCount = data.memberIds.length;
-        delete data.memberIds;
-      }
-      const contacts = await Contact.find();
-      if (data.type === 'dynamic') {
-        data.memberCount = resolveMembers(data, contacts).length;
-      } else if (data.type === 'static' && data.members?.length) {
-        data.memberCount = data.members.length;
-      }
+      const memberIds = data.memberIds;
+      if (memberIds) { data.members = memberIds; delete data.memberIds; }
       const group = await Group.create(data);
-      if (group.type === 'static' && group.members?.length) {
-        await syncContactGroups(group._id, group.members);
-      }
-      res.status(201).json({ success: true, data: withMemberCount(group, contacts) });
-    } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
-    }
+      if (group.type === 'static' && memberIds) await syncContactGroups(group._id, memberIds);
+      res.status(201).json({ success: true, data: await responseGroup(group) });
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
   },
 
   async update(req, res) {
     try {
+      const existing = await Group.findById(req.params.id).lean();
+      if (!existing) return res.status(404).json({ success: false, message: 'Group not found.' });
       const data = { ...req.body };
-      if (data.memberIds) {
-        data.members = data.memberIds;
-        data.memberCount = data.memberIds.length;
-        delete data.memberIds;
-      }
-      const contacts = await Contact.find();
-      if (data.type === 'dynamic' || (data.rules && !data.memberIds)) {
-        const existing = await Group.findById(req.params.id);
-        if (!existing) return res.status(404).json({ success: false, message: 'Group not found.' });
-        const merged = { ...existing.toObject(), ...data };
-        data.memberCount = resolveMembers(merged, contacts).length;
-      }
+      const memberIds = data.memberIds;
+      if (memberIds) { data.members = memberIds; delete data.memberIds; }
       const group = await Group.findByIdAndUpdate(req.params.id, data, { new: true });
-      if (!group) return res.status(404).json({ success: false, message: 'Group not found.' });
-      if (group.type === 'static' && data.members) {
-        await syncContactGroups(group._id, group.members);
-      }
-      res.json({ success: true, data: withMemberCount(group, contacts) });
-    } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
-    }
+      if (group.type === 'static' && memberIds) await syncContactGroups(group._id, memberIds);
+      res.json({ success: true, data: await responseGroup(group) });
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
   },
 
   async updateMembers(req, res) {
     try {
-      const { memberIds = [] } = req.body;
-      const group = await Group.findByIdAndUpdate(
-        req.params.id,
-        { members: memberIds, memberCount: memberIds.length, type: 'static' },
-        { new: true }
-      );
+      const memberIds = Array.isArray(req.body.memberIds) ? req.body.memberIds : [];
+      const group = await Group.findByIdAndUpdate(req.params.id, { members: memberIds, type: 'static' }, { new: true });
       if (!group) return res.status(404).json({ success: false, message: 'Group not found.' });
       await syncContactGroups(group._id, memberIds);
-      const members = resolveMembers(group, await Contact.find());
-      res.json({ success: true, data: { group, members } });
-    } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
-    }
+      const groupData = await responseGroup(group);
+      const { members, pagination } = await memberPage(groupData, { page: 1, limit: MAX_MEMBER_PAGE_SIZE });
+      res.json({ success: true, data: { group: groupData, members, pagination } });
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
   },
 
-    async remove(req, res) {
+  async remove(req, res) {
     try {
       await Group.findByIdAndDelete(req.params.id);
       res.json({ success: true, message: 'Group deleted.' });
-    } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
-    }
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
   }
 };
 

@@ -50,7 +50,7 @@ function jsonResponse(data, status = 200) {
   };
 }
 
-function defaultResponse(method, pathname) {
+function defaultResponse(method, pathname, url) {
   if (pathname === '/api/health') return { success: true, message: 'RMS API is running' };
   if (pathname === '/api/auth/login' && method === 'POST') return { success: true, token: 'e2e-token', user: data.user };
   if (pathname === '/api/auth/forgot-password' && method === 'POST') return { success: true, message: 'If the account exists, a reset link was sent.' };
@@ -60,6 +60,10 @@ function defaultResponse(method, pathname) {
   if (pathname === '/api/notifications') return { success: true, data: [data.notification] };
   if (pathname === '/api/dashboard/stats') return { success: true, data: data.dashboard };
   if (pathname === '/api/contacts/birthdays') return { success: true, data: [data.contact] };
+  if (pathname === '/api/contacts/birthdays/calendar') {
+    if (url.searchParams.has('day')) return { success: true, data: [data.contact], pagination: { page: 1, limit: 100, total: 1, pages: 1 } };
+    return { success: true, data: [{ day: 12, count: 1 }] };
+  }
   if (pathname === '/api/contacts/anniversaries') return { success: true, data: [data.contact] };
   if (pathname === '/api/contacts' && method === 'GET') return { success: true, data: [data.contact], pagination: { page: 1, limit: 25, total: 1, pages: 1 } };
   if (pathname === '/api/contacts' && method === 'POST') return { success: true, data: data.contact, message: 'Contact created successfully' };
@@ -114,11 +118,15 @@ async function mockRmsApi(page) {
     pageErrors: [],
     consoleErrors: [],
     failures: new Map(),
+    responses: new Map(),
     delays: new Map(),
     activeByPath: new Map(),
     maxConcurrentByPath: new Map(),
     fail(method, pathname, status = 500, message = 'Request failed') {
       this.failures.set(`${method.toUpperCase()} ${pathname}`, { status, message });
+    },
+    respond(method, pathname, response) {
+      this.responses.set(`${method.toUpperCase()} ${pathname}`, response);
     },
     delay(method, pathname, milliseconds) {
       this.delays.set(`${method.toUpperCase()} ${pathname}`, milliseconds);
@@ -154,7 +162,10 @@ async function mockRmsApi(page) {
       return route.fulfill(jsonResponse({ success: false, message: failure.message }, failure.status));
     }
 
-    return route.fulfill(jsonResponse(defaultResponse(method, pathname)));
+    const response = state.responses.get(key) || state.responses.get(`${method} ${family}`);
+    if (response) return route.fulfill(jsonResponse(typeof response === 'function' ? response(url) : response));
+
+    return route.fulfill(jsonResponse(defaultResponse(method, pathname, url)));
   });
 
   return state;

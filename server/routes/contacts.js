@@ -7,6 +7,7 @@ const router = express.Router();
 router.use(auth);
 
 router.get('/', contactController.getAll);
+router.get('/birthdays/calendar', contactController.getBirthdayCalendar);
 router.get('/birthdays', contactController.getBirthdays);
 router.get('/anniversaries', contactController.getAnniversaries);
 router.post('/bulk-import', contactController.bulkImport);

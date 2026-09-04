@@ -2,6 +2,7 @@ RMS.components.initLayout('/pages/delivery.html', 'Delivery Tracking', 'Home / D
 
 let activeJobId = null;
 let pollTimer = null;
+let messagePage = 1;
 
 document.getElementById('pageActions').innerHTML = `
   <button class="btn btn-outline-secondary" onclick="loadJobs()"><i class="bi bi-arrow-clockwise me-1"></i> Refresh</button>`;
@@ -49,7 +50,7 @@ document.getElementById('pageBody').innerHTML = `
         <div class="card-header d-flex justify-content-between align-items-center">
           <span><i class="bi bi-envelope-check me-2"></i>Message Log</span>
           <label class="visually-hidden" for="statusFilter">Filter messages by status</label>
-          <select class="form-select form-select-sm w-auto" id="statusFilter" onchange="loadJobMessages()">
+          <select class="form-select form-select-sm w-auto" id="statusFilter" onchange="resetMessagePage()">
             <option value="">All statuses</option>
             <option value="pending">Pending</option>
             <option value="delivered">Delivered</option>
@@ -62,6 +63,11 @@ document.getElementById('pageBody').innerHTML = `
             <thead><tr><th>Contact</th><th>Channel</th><th>Recipient</th><th>Status</th><th>Retries</th><th>Error</th></tr></thead>
             <tbody id="messagesBody"><tr><td colspan="6" class="text-center text-secondary py-4">Select a job</td></tr></tbody>
           </table>
+        </div>
+        <div class="card-footer d-flex justify-content-between align-items-center d-none" id="messagesPager">
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="messagesPrev" onclick="changeMessagePage(-1)">Previous</button>
+          <span class="small text-secondary" id="messagesPageInfo"></span>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="messagesNext" onclick="changeMessagePage(1)">Next</button>
         </div>
       </div>
     </div>
@@ -107,6 +113,7 @@ async function loadJobs() {
 
 window.selectJob = async (id) => {
   activeJobId = id;
+  messagePage = 1;
   await refreshJobDetail(id);
   await loadJobMessages();
   loadJobs();
@@ -148,10 +155,11 @@ async function refreshJobDetail(id) {
 async function loadJobMessages() {
   if (!activeJobId) return;
   const status = document.getElementById('statusFilter').value;
-  const params = new URLSearchParams({ limit: 100 });
+  const params = new URLSearchParams({ page: messagePage, limit: 100 });
   if (status) params.set('status', status);
   const res = await RMS.api.get(`/delivery/jobs/${activeJobId}/messages?${params}`);
   const rows = res?.data || [];
+  const pagination = res?.pagination || { page: messagePage, pages: 1, total: rows.length };
   document.getElementById('messagesBody').innerHTML = rows.length
     ? rows.map(m => `<tr>
         <td>${m.contactName || '-'}</td>
@@ -162,7 +170,22 @@ async function loadJobMessages() {
         <td class="small text-danger">${m.failureReason || m.error || '-'}</td>
       </tr>`).join('')
     : '<tr><td colspan="6" class="text-center text-secondary py-3">No messages</td></tr>';
+  const pager = document.getElementById('messagesPager');
+  pager.classList.toggle('d-none', pagination.pages <= 1);
+  document.getElementById('messagesPageInfo').textContent = `Page ${pagination.page} of ${pagination.pages} (${pagination.total} messages)`;
+  document.getElementById('messagesPrev').disabled = pagination.page <= 1;
+  document.getElementById('messagesNext').disabled = pagination.page >= pagination.pages;
 }
+
+window.resetMessagePage = () => {
+  messagePage = 1;
+  loadJobMessages();
+};
+
+window.changeMessagePage = (direction) => {
+  messagePage = Math.max(1, messagePage + direction);
+  loadJobMessages();
+};
 
 window.retryFailed = async (button) => {
   if (!activeJobId) return;

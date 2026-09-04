@@ -39,6 +39,7 @@ document.getElementById('pageBody').innerHTML = `
   </div></div></div>`;
 
 let allContacts = [], calDate = new Date(), birthdayTemplates = [], todayBirthdays = [];
+let birthdayCountsByDay = {};
 init();
 
 async function init() {
@@ -63,7 +64,14 @@ async function init() {
   document.getElementById('templateGrid').innerHTML = templates.map(t => `<div class="col-md-6"><div class="card"><div class="card-header">${t.name} ${t.isDefault?'<span class="badge bg-primary">Default</span>':''}</div><div class="card-body"><pre class="small bg-light p-3 rounded">${t.body}</pre><div class="mt-2">${(t.variables||[]).map(v=>`<span class="var-chip">{{${v}}}</span>`).join('')}</div></div></div></div>`).join('');
   document.getElementById('wishTemplate').innerHTML = templates.map(t => `<option value="${t._id}">${t.name}</option>`).join('');
 
-  document.querySelector('[data-bs-target="#calendar"]')?.addEventListener('shown.bs.tab', () => renderCalendar());
+  document.querySelector('[data-bs-target="#calendar"]')?.addEventListener('shown.bs.tab', loadCalendar);
+  renderCalendar();
+}
+
+async function loadCalendar() {
+  const month = calDate.getMonth() + 1;
+  const res = await RMS.api.get(`/contacts/birthdays/calendar?month=${month}`);
+  birthdayCountsByDay = Object.fromEntries((res?.data || []).map(entry => [entry.day, entry.count]));
   renderCalendar();
 }
 
@@ -99,7 +107,7 @@ function daysUntil(dob) {
   if (next < today) next.setFullYear(today.getFullYear()+1);
   return Math.ceil((next-today)/86400000);
 }
-window.changeMonth = (dir) => { calDate.setMonth(calDate.getMonth() + dir); renderCalendar(); };
+window.changeMonth = (dir) => { calDate.setMonth(calDate.getMonth() + dir); loadCalendar(); };
 
 function renderCalendar() {
   const grid = document.getElementById('calendarGrid');
@@ -125,12 +133,13 @@ function renderCalendar() {
 
   for (let d = 1; d <= daysInMonth; d++) {
     const isToday = d === today.getDate() && m === today.getMonth() && y === today.getFullYear();
-    const bdayList = birthdayMap[d] || [];
-    const hasEvent = bdayList.length > 0;
-    const title = hasEvent ? bdayList.map(c => `${c.firstName} ${c.lastName}`).join(', ') : '';
-    html += `<button type="button" class="calendar-day ${isToday ? 'today' : ''} ${hasEvent ? 'has-event' : ''}" title="${title}" aria-label="${monthLabel.textContent} ${d}${hasEvent ? `, ${bdayList.length} birthday${bdayList.length === 1 ? '' : 's'}` : ', no birthdays'}" onclick="showDayBirthdays(${d})">
+    const knownBirthdays = birthdayMap[d] || [];
+    const count = birthdayCountsByDay[d] || knownBirthdays.length;
+    const hasEvent = count > 0;
+    const title = hasEvent ? `${count} birthday${count === 1 ? '' : 's'}` : '';
+    html += `<button type="button" class="calendar-day ${isToday ? 'today' : ''} ${hasEvent ? 'has-event' : ''}" title="${title}" aria-label="${monthLabel.textContent} ${d}${hasEvent ? `, ${count} birthday${count === 1 ? '' : 's'}` : ', no birthdays'}" onclick="showDayBirthdays(${d})">
       <span class="day-num">${d}</span>
-      ${hasEvent ? `<span class="day-count">${bdayList.length}</span>` : ''}
+      ${hasEvent ? `<span class="day-count">${count}</span>` : ''}
     </button>`;
   }
 
@@ -140,7 +149,7 @@ function renderCalendar() {
     .sort(([a], [b]) => +a - +b)
     .flatMap(([, contacts]) => contacts);
 
-  if (monthList) {
+  if (false && monthList) {
     monthList.innerHTML = monthContacts.length
       ? `<h6 class="fw-semibold mb-3"><i class="bi bi-cake2 me-2"></i>Birthdays in ${monthLabel.textContent} (${monthContacts.length})</h6>
          <div class="row g-2">${monthContacts.map(c => `
@@ -156,14 +165,29 @@ function renderCalendar() {
            </div>`).join('')}</div>`
       : `<div class="empty-state py-3"><i class="bi bi-calendar-x d-block"></i>No birthdays in ${monthLabel.textContent}</div>`;
   }
+  if (monthList) {
+    monthList.innerHTML = '<div class="text-secondary small py-2">Select a birthday date to view its contacts.</div>';
+  }
 }
 
-window.showDayBirthdays = (day) => {
-  const m = calDate.getMonth();
-  const list = getBirthdaysByDay(m)[day] || [];
-  if (!list.length) return;
-  const names = list.map(c => `${c.firstName} ${c.lastName}`).join(', ');
-  RMS.toast.show(`Birthdays on ${calDate.toLocaleString('en', { month: 'short' })} ${day}: ${names}`, 'info');
+window.showDayBirthdays = async (day) => {
+  const count = birthdayCountsByDay[day] || 0;
+  if (!count) return;
+  const monthList = document.getElementById('calendarMonthList');
+  monthList.innerHTML = '<div class="text-secondary small py-2">Loading birthdays…</div>';
+  const res = await RMS.api.get(`/contacts/birthdays/calendar?month=${calDate.getMonth() + 1}&day=${day}&page=1&limit=100`);
+  const contacts = res?.data || [];
+  const label = `${calDate.toLocaleString('en', { month: 'long' })} ${day}`;
+  monthList.innerHTML = contacts.length
+    ? `<h6 class="fw-semibold mb-3"><i class="bi bi-cake2 me-2"></i>Birthdays on ${label} (${count})</h6>
+       <div class="row g-2">${contacts.map(c => `
+         <div class="col-md-6"><div class="d-flex align-items-center gap-2 p-2 border rounded">
+           <div class="avatar">${RMS.utils.getInitials(c.firstName, c.lastName)}</div>
+           <div class="flex-grow-1"><div class="fw-semibold small">${c.firstName} ${c.lastName}</div>
+             <div class="text-secondary" style="font-size:.75rem">${RMS.utils.formatContactSubtitle(c)}</div></div>
+           <button type="button" class="btn btn-sm btn-outline-primary" onclick="sendBirthdayWish('${c._id}', undefined, this)" aria-label="Send birthday wish"><i class="bi bi-send"></i></button>
+         </div></div>`).join('')}</div>`
+    : `<div class="empty-state py-3"><i class="bi bi-calendar-x d-block"></i>No birthdays on ${label}</div>`;
 };
 window.sendBirthdayWish = async (contactId, channel, button) => {
   const tmpl = birthdayTemplates.find(t => t.isDefault) || birthdayTemplates[0];

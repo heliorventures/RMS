@@ -19,6 +19,32 @@ function buildContactFilter(query) {
   return filter;
 }
 
+function datesFromToday(daysAhead, includeToday = false) {
+  const dates = [];
+  const cursor = new Date();
+  cursor.setHours(0, 0, 0, 0);
+  for (let offset = includeToday ? 0 : 1; offset <= daysAhead; offset += 1) {
+    const date = new Date(cursor);
+    date.setDate(cursor.getDate() + offset);
+    dates.push({ month: date.getMonth() + 1, day: date.getDate() });
+  }
+  return dates;
+}
+
+function annualDateFilter(field, dates) {
+  return {
+    [field]: { $type: 'date' },
+    $expr: {
+      $or: dates.map(({ month, day }) => ({
+        $and: [
+          { $eq: [{ $month: `$${field}` }, month] },
+          { $eq: [{ $dayOfMonth: `$${field}` }, day] }
+        ]
+      }))
+    }
+  };
+}
+
 const contactController = {
   async getAll(req, res) {
     try {
@@ -96,20 +122,50 @@ const contactController = {
     try {
       const { type = 'today' } = req.query;
       const { page, limit } = pageRequest(req.query);
-      const today = new Date();
-      const contacts = await Contact.find({ dob: { $exists: true } }).lean();
+      const filter = annualDateFilter('dob', type === 'today' ? datesFromToday(0, true) : datesFromToday(30));
+      const total = await Contact.countDocuments(filter);
+      const data = await Contact.find(filter)
+        .sort({ firstName: 1, _id: 1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean();
+      res.json({ success: true, data, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  },
 
-      const filtered = contacts.filter(c => {
-        const dob = new Date(c.dob);
-        if (type === 'today') {
-          return dob.getMonth() === today.getMonth() && dob.getDate() === today.getDate();
+  async getBirthdayCalendar(req, res) {
+    try {
+      const month = Number.parseInt(req.query.month, 10);
+      if (!Number.isInteger(month) || month < 1 || month > 12) {
+        return res.status(400).json({ success: false, message: 'A calendar month from 1 through 12 is required.' });
+      }
+      const day = Number.parseInt(req.query.day, 10);
+      if (Number.isInteger(day)) {
+        if (day < 1 || day > 31) {
+          return res.status(400).json({ success: false, message: 'A calendar day from 1 through 31 is required.' });
         }
-        const diff = getDaysUntilBirthday(dob, today);
-        return diff > 0 && diff <= 30;
-      });
+        const { page, limit } = pageRequest(req.query);
+        const filter = annualDateFilter('dob', [{ month, day }]);
+        const total = await Contact.countDocuments(filter);
+        const data = await Contact.find(filter)
+          .sort({ firstName: 1, _id: 1 })
+          .skip((page - 1) * limit)
+          .limit(limit)
+          .lean();
+        return res.json({ success: true, data, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+      }
 
-      const total = filtered.length;
-      res.json({ success: true, data: filtered.slice((page - 1) * limit, page * limit), pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+      const data = await Contact.aggregate([
+        { $match: { dob: { $type: 'date' } } },
+        { $project: { day: { $dayOfMonth: '$dob' }, month: { $month: '$dob' } } },
+        { $match: { month } },
+        { $group: { _id: '$day', count: { $sum: 1 } } },
+        { $project: { _id: 0, day: '$_id', count: 1 } },
+        { $sort: { day: 1 } }
+      ]);
+      res.json({ success: true, data });
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
     }
@@ -143,24 +199,19 @@ const contactController = {
   async getAnniversaries(req, res) {
     try {
       const { type = 'today' } = req.query;
-      const today = new Date();
-      const contacts = await Contact.find({ anniversary: { $exists: true } });
-
-      const filtered = contacts.filter(c => {
-        const ann = new Date(c.anniversary);
-        if (type === 'today') {
-          return ann.getMonth() === today.getMonth() && ann.getDate() === today.getDate();
-        }
-        const diff = getDaysUntilBirthday(ann, today);
-        return diff > 0 && diff <= 30;
-      });
-
-      res.json({ success: true, data: filtered });
+      const { page, limit } = pageRequest(req.query);
+      const filter = annualDateFilter('anniversary', type === 'today' ? datesFromToday(0, true) : datesFromToday(30));
+      const total = await Contact.countDocuments(filter);
+      const data = await Contact.find(filter)
+        .sort({ firstName: 1, _id: 1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean();
+      res.json({ success: true, data, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
     }
-  }
-  ,
+  },
 
   async bulkLookup(req, res) {
     try {

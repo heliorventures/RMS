@@ -2,80 +2,84 @@ const Contact = require('../models/Contact');
 const Campaign = require('../models/Campaign');
 const Message = require('../models/Message');
 
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const MAX_PAGE_SIZE = 100;
+
+function pageRequest(query, fallback = 50) {
+  const page = Math.max(1, Number.parseInt(query.page, 10) || 1);
+  const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number.parseInt(query.limit, 10) || fallback));
+  return { page, limit };
+}
+
+function toCountMap(rows) {
+  return Object.fromEntries(rows.map(row => [row._id || 'Unknown', row.count]));
+}
+
+function countBy(model, field, fallback = 'Unknown', match = {}) {
+  return model.aggregate([
+    { $match: match },
+    { $group: { _id: { $ifNull: [`$${field}`, fallback] }, count: { $sum: 1 } } },
+    { $sort: { _id: 1 } }
+  ]);
+}
+
 const reportsController = {
   async getContactsReport(req, res) {
     try {
-      const contacts = await Contact.find();
-      const byCity = {}, bySector = {}, byReligion = {}, byStatus = {};
-      contacts.forEach(c => {
-        byCity[c.city || 'Unknown'] = (byCity[c.city || 'Unknown'] || 0) + 1;
-        bySector[c.sector || 'Unknown'] = (bySector[c.sector || 'Unknown'] || 0) + 1;
-        byReligion[c.religion || 'Unknown'] = (byReligion[c.religion || 'Unknown'] || 0) + 1;
-        byStatus[c.status || 'Active'] = (byStatus[c.status || 'Active'] || 0) + 1;
-      });
-      res.json({ success: true, data: { total: contacts.length, byCity, bySector, byReligion, byStatus } });
-    } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
-    }
+      const [total, cityRows, sectorRows, religionRows, statusRows] = await Promise.all([
+        Contact.countDocuments(),
+        countBy(Contact, 'city'),
+        countBy(Contact, 'sector'),
+        countBy(Contact, 'religion'),
+        countBy(Contact, 'status', 'Active')
+      ]);
+      res.json({ success: true, data: { total, byCity: toCountMap(cityRows), bySector: toCountMap(sectorRows), byReligion: toCountMap(religionRows), byStatus: toCountMap(statusRows) } });
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
   },
 
   async getCampaignReport(req, res) {
     try {
-      const campaigns = await Campaign.find();
-      const byType = {}, byStatus = {};
-      campaigns.forEach(c => {
-        byType[c.type] = (byType[c.type] || 0) + 1;
-        byStatus[c.status] = (byStatus[c.status] || 0) + 1;
-      });
-      res.json({ success: true, data: { total: campaigns.length, byType, byStatus, campaigns } });
-    } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
-    }
+      const [total, typeRows, statusRows] = await Promise.all([
+        Campaign.countDocuments(), countBy(Campaign, 'type'), countBy(Campaign, 'status')
+      ]);
+      res.json({ success: true, data: { total, byType: toCountMap(typeRows), byStatus: toCountMap(statusRows) } });
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
   },
 
   async getDeliveryReport(req, res) {
     try {
-      const page = +req.query.page || 1;
-      const limit = +req.query.limit || 50;
-      const status = req.query.status;
-
-      const q = status ? { status } : {};
-      const total = await Message.countDocuments(q);
-      const messages = await Message.find(q).sort({ updatedAt: -1 }).skip((page - 1) * limit).limit(limit).lean();
-      const byType = { email: 0, whatsapp: 0, sms: 0 };
-      const byStatus = { sent: 0, delivered: 0, failed: 0, pending: 0, skipped: 0, processing: 0 };
-      const all = await Message.find().lean();
-      all.forEach(m => {
-        byType[m.type] = (byType[m.type] || 0) + 1;
-        byStatus[m.status] = (byStatus[m.status] || 0) + 1;
-      });
+      const { page, limit } = pageRequest(req.query);
+      const filter = req.query.status ? { status: req.query.status } : {};
+      const [total, allTotal, messages, typeRows, statusRows] = await Promise.all([
+        Message.countDocuments(filter),
+        Message.countDocuments(),
+        Message.find(filter).sort({ updatedAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+        countBy(Message, 'type'),
+        countBy(Message, 'status')
+      ]);
       res.json({
         success: true,
         data: {
-          total: all.length,
-          byType,
-          byStatus,
+          total: allTotal,
+          byType: toCountMap(typeRows),
+          byStatus: toCountMap(statusRows),
           messages,
-          pagination: { page, limit, total }
+          pagination: { page, limit, total, pages: Math.ceil(total / limit) }
         }
       });
-    } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
-    }
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
   },
 
   async getBirthdayReport(req, res) {
     try {
-      const contacts = await Contact.find({ dob: { $exists: true } });
-      const byMonth = {};
-      contacts.forEach(c => {
-        const m = new Date(c.dob).toLocaleString('en', { month: 'long' });
-        byMonth[m] = (byMonth[m] || 0) + 1;
-      });
-      res.json({ success: true, data: { total: contacts.length, byMonth } });
-    } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
-    }
+      const rows = await Contact.aggregate([
+        { $match: { dob: { $type: 'date' } } },
+        { $group: { _id: { $month: '$dob' }, count: { $sum: 1 } } },
+        { $sort: { _id: 1 } }
+      ]);
+      const byMonth = Object.fromEntries(rows.map(row => [MONTHS[row._id - 1], row.count]));
+      res.json({ success: true, data: { total: rows.reduce((sum, row) => sum + row.count, 0), byMonth } });
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
   }
 };
 

@@ -6,10 +6,13 @@ mountGroupModals();
 
 let allGroups = [];
 let allContacts = [];
+let memberSearchResults = [];
 let selectedMemberIds = new Set();
 let excludedMemberIds = new Set();
 let activeGroupId = null;
 let activeGroupType = 'static';
+let activeMembers = [];
+let activeMemberPagination = { page: 1, pages: 1, total: 0 };
 
 init();
 
@@ -19,8 +22,27 @@ async function init() {
   renderGroups();
 
   document.getElementById('groupType').addEventListener('change', toggleGroupSections);
-  document.getElementById('memberSearch').addEventListener('input', RMS.utils.debounce(renderMemberPicker, 200));
-  document.getElementById('modalMemberSearch').addEventListener('input', RMS.utils.debounce(renderModalMemberPicker, 200));
+  document.getElementById('memberSearch').addEventListener('input', RMS.utils.debounce(() => searchMembers('group'), 250));
+  document.getElementById('modalMemberSearch').addEventListener('input', RMS.utils.debounce(() => searchMembers('modal'), 250));
+}
+
+function rememberContacts(contacts) {
+  const byId = new Map(allContacts.map(contact => [String(contact._id), contact]));
+  contacts.forEach(contact => byId.set(String(contact._id), contact));
+  allContacts = [...byId.values()];
+}
+
+async function searchMembers(target) {
+  const input = document.getElementById(target === 'group' ? 'memberSearch' : 'modalMemberSearch');
+  const query = input.value.trim();
+  if (query.length < 2) {
+    memberSearchResults = [];
+    return target === 'group' ? renderMemberPicker() : renderModalMemberPicker();
+  }
+  const res = await RMS.api.get(`/contacts?page=1&limit=25&search=${encodeURIComponent(query)}`);
+  memberSearchResults = res?.data || [];
+  rememberContacts(memberSearchResults);
+  return target === 'group' ? renderMemberPicker() : renderModalMemberPicker();
 }
 
 function matchRule(contact, rule) {
@@ -145,6 +167,11 @@ function mountGroupModals() {
                 <tbody id="membersTableBody"></tbody>
               </table>
             </div>
+            <div class="d-flex justify-content-between align-items-center mt-3 d-none" id="groupMembersPager">
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="groupMembersPrev" onclick="changeGroupMemberPage(-1)">Previous</button>
+              <span class="small text-secondary" id="groupMembersPageInfo"></span>
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="groupMembersNext" onclick="changeGroupMemberPage(1)">Next</button>
+            </div>
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -158,9 +185,8 @@ function mountGroupModals() {
 }
 
 function renderGroups() {
-  enrichGroupCounts();
   document.getElementById('groupsGrid').innerHTML = allGroups.length ? allGroups.map(g => {
-    const count = getGroupMemberCount(g);
+    const count = g.memberCount || 0;
     return `
     <div class="col-md-4 col-lg-3">
       <div class="group-card">
@@ -196,15 +222,16 @@ function toggleGroupSections() {
 function renderMemberChips(containerId, ids, removable, removeFn = 'toggleMember') {
   const el = document.getElementById(containerId);
   if (!el) return;
-  const list = [...ids].map(id => allContacts.find(c => String(c._id) === String(id))).filter(Boolean);
+  const selected = [...ids];
+  const list = selected.slice(0, 100).map(id => allContacts.find(c => String(c._id) === String(id))).filter(Boolean);
   el.innerHTML = list.length
-    ? list.map(c => `<span class="member-chip">${c.firstName} ${c.lastName}${removable ? `<button type="button" onclick="${removeFn}('${c._id}')" aria-label="Remove member">&times;</button>` : ''}</span>`).join('')
+    ? `${list.map(c => `<span class="member-chip">${c.firstName} ${c.lastName}${removable ? `<button type="button" onclick="${removeFn}('${c._id}')" aria-label="Remove member">&times;</button>` : ''}</span>`).join('')}${selected.length > list.length ? `<span class="text-secondary small">+${selected.length - list.length} more</span>` : ''}`
     : '<span class="text-secondary small">No members</span>';
 }
 
 function renderMemberPicker() {
   const q = document.getElementById('memberSearch').value.toLowerCase();
-  const filtered = allContacts.filter(c =>
+  const filtered = memberSearchResults.filter(c =>
     !selectedMemberIds.has(c._id) &&
     RMS.utils.contactSearchText(c).includes(q)
   ).slice(0, 50);
@@ -218,13 +245,13 @@ function renderMemberPicker() {
         </div>
         <i class="bi bi-plus-circle text-primary"></i>
       </button>`).join('')
-    : '<div class="p-3 text-secondary small text-center">No contacts found</div>';
+    : `<div class="p-3 text-secondary small text-center">${q.trim().length < 2 ? 'Type at least two characters to search contacts' : 'No contacts found'}</div>`;
   renderMemberChips('selectedMemberChips', selectedMemberIds, true);
 }
 
 function renderModalMemberPicker() {
   const q = document.getElementById('modalMemberSearch').value.toLowerCase();
-  const filtered = allContacts.filter(c =>
+  const filtered = memberSearchResults.filter(c =>
     !selectedMemberIds.has(c._id) &&
     RMS.utils.contactSearchText(c).includes(q)
   ).slice(0, 50);
@@ -238,7 +265,7 @@ function renderModalMemberPicker() {
         </div>
         <i class="bi bi-plus-circle text-primary"></i>
       </button>`).join('')
-    : '<div class="p-3 text-secondary small text-center">No contacts to add</div>';
+    : `<div class="p-3 text-secondary small text-center">${q.trim().length < 2 ? 'Type at least two characters to search contacts' : 'No contacts to add'}</div>`;
 }
 
 window.toggleMember = (id) => {
@@ -250,30 +277,32 @@ window.toggleMember = (id) => {
 window.addMemberInModal = (id) => {
   selectedMemberIds.add(id);
   excludedMemberIds.delete(String(id));
+  const contact = allContacts.find(item => String(item._id) === String(id));
+  if (contact && !activeMembers.some(item => String(item._id) === String(id))) activeMembers.push(contact);
   refreshMembersModal();
 };
 
 window.removeMemberInModal = (id) => {
   selectedMemberIds.delete(id);
+  activeMembers = activeMembers.filter(item => String(item._id) !== String(id));
   refreshMembersModal();
 };
 
 window.excludeMemberFromGroup = (id) => {
   excludedMemberIds.add(String(id));
   selectedMemberIds.delete(id);
+  activeMembers = activeMembers.filter(item => String(item._id) !== String(id));
   refreshMembersModal();
 };
 
 function refreshMembersModal() {
-  const group = allGroups.find(g => g._id === activeGroupId) || { type: activeGroupType, excludedMembers: [...excludedMemberIds] };
-  group.excludedMembers = [...excludedMemberIds];
-  const members = resolveGroupMembers(group);
-  renderMembersModalContent(members);
+  renderMembersModalContent(activeMembers);
   if (activeGroupType === 'static') renderModalMemberPicker();
 }
 
 function renderMembersModalContent(members) {
-  document.getElementById('membersCountBadge').textContent = members.length;
+  const displayedCount = activeGroupType === 'static' ? selectedMemberIds.size : activeMemberPagination.total;
+  document.getElementById('membersCountBadge').textContent = displayedCount;
   renderMemberChips('currentMemberChips', new Set(members.map(m => m._id)), true,
     activeGroupType === 'dynamic' ? 'excludeMemberFromGroup' : 'removeMemberInModal');
   document.getElementById('membersTableBody').innerHTML = members.length
@@ -288,31 +317,50 @@ function renderMembersModalContent(members) {
         </td>
       </tr>`).join('')
     : '<tr><td colspan="6" class="text-center text-secondary py-3">No members in this group</td></tr>';
+  renderMembersPager();
 }
 
+function renderMembersPager() {
+  const pager = document.getElementById('groupMembersPager');
+  const { page = 1, pages = 1, total = 0 } = activeMemberPagination;
+  pager.classList.toggle('d-none', pages <= 1);
+  document.getElementById('groupMembersPageInfo').textContent = `Page ${page} of ${pages} (${total} members)`;
+  document.getElementById('groupMembersPrev').disabled = page <= 1;
+  document.getElementById('groupMembersNext').disabled = page >= pages;
+}
+
+async function loadMembersPage(page) {
+  const res = await RMS.api.get(`/groups/${activeGroupId}?page=${page}&limit=100`);
+  const { group, members, pagination } = res?.data || {};
+  if (!group?._id) return RMS.toast.show('Group members could not be loaded', 'error');
+  activeMembers = members || [];
+  activeMemberPagination = pagination || { page, pages: 1, total: activeMembers.length };
+  rememberContacts(activeMembers);
+  if (activeGroupType === 'dynamic') selectedMemberIds = new Set(activeMembers.map(member => String(member._id)));
+  renderMembersModalContent(activeMembers);
+}
+
+window.changeGroupMemberPage = (direction) => {
+  const nextPage = Math.max(1, Math.min(activeMemberPagination.pages, activeMemberPagination.page + direction));
+  if (nextPage !== activeMemberPagination.page) loadMembersPage(nextPage);
+};
+
 window.openGroupModal = async () => {
-  if (!allContacts.length) {
-    const res = await RMS.api.get('/contacts?limit=500');
-    allContacts = res?.data || [];
-  }
   document.getElementById('groupForm').reset();
   document.getElementById('groupId').value = '';
   document.getElementById('groupModalTitle').textContent = 'Create Custom Group';
   document.getElementById('groupColor').value = '#2563eb';
   document.getElementById('groupType').value = 'static';
   selectedMemberIds = new Set();
+  memberSearchResults = [];
   toggleGroupSections();
   renderMemberPicker();
   new bootstrap.Modal(document.getElementById('groupModal')).show();
 };
 
 window.editGroup = async (id) => {
-  if (!allContacts.length) {
-    const res = await RMS.api.get('/contacts?limit=500');
-    allContacts = res?.data || [];
-  }
   let group = allGroups.find(g => g._id === id);
-  const res = await RMS.api.get(`/groups/${id}`);
+  const res = await RMS.api.get(`/groups/${id}?page=1&limit=100`);
   const members = res?.data?.members || [];
   group = res?.data?.group || group;
   if (!group?._id) return RMS.toast.show('Group not found', 'error');
@@ -325,6 +373,8 @@ window.editGroup = async (id) => {
   document.getElementById('groupColor').value = group.color || '#2563eb';
 
   selectedMemberIds = new Set((group.members || members.map(m => m._id)).map(String));
+  rememberContacts(members);
+  memberSearchResults = [];
   toggleGroupSections();
 
   if (group.rules?.length) {
@@ -391,13 +441,18 @@ async function reloadGroups() {
 
 window.viewMembers = async (id) => {
   activeGroupId = id;
-  const res = await RMS.api.get(`/groups/${id}`);
+  const res = await RMS.api.get(`/groups/${id}?page=1&limit=100`);
   const { group, members } = res?.data || { group: {}, members: [] };
   if (!group?._id) return RMS.toast.show('Group not found', 'error');
 
   activeGroupType = group.type || 'static';
   selectedMemberIds = new Set(members.map(m => String(m._id)));
+  if (activeGroupType === 'static' && group.members?.length) selectedMemberIds = new Set(group.members.map(String));
   excludedMemberIds = new Set((group.excludedMembers || []).map(String));
+  rememberContacts(members);
+  memberSearchResults = [];
+  activeMembers = members;
+  activeMemberPagination = res?.data?.pagination || { page: 1, pages: 1, total: members.length };
 
   document.getElementById('membersTitle').textContent = group.name;
   document.getElementById('membersSubtitle').textContent = activeGroupType === 'dynamic'
@@ -427,8 +482,9 @@ window.saveMembers = async (button) => {
     const res = result.value;
     const group = res.data?.group || res.data;
     const members = res.data?.members || resolveGroupMembers({ ...group, excludedMembers: [...excludedMemberIds], members: [...selectedMemberIds], type: activeGroupType });
-    allGroups = allGroups.map(g => g._id === activeGroupId ? { ...g, ...group, memberCount: members.length } : g);
-    enrichGroupCounts();
+    activeMembers = members;
+    activeMemberPagination = res.data?.pagination || { page: 1, pages: 1, total: members.length };
+    allGroups = allGroups.map(g => g._id === activeGroupId ? { ...g, ...group, memberCount: group.memberCount ?? activeMemberPagination.total ?? members.length } : g);
     renderGroups();
     renderMembersModalContent(members);
     if (activeGroupType === 'static') renderModalMemberPicker();

@@ -4,12 +4,21 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
+const fs = require('fs');
 const connectDB = require('./server/config/db');
 const { router: modulesRouter } = require('./server/routes/modules');
 const { startDeliveryWorker, stopDeliveryWorker } = require('./server/services/deliveryQueue');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const assetManifestPath = path.join(__dirname, 'public', 'dist', 'manifest.json');
+let assetManifest = {};
+
+try {
+  assetManifest = JSON.parse(fs.readFileSync(assetManifestPath, 'utf8'));
+} catch (error) {
+  if (error.code !== 'ENOENT') throw error;
+}
 
 app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 1));
 
@@ -31,10 +40,10 @@ app.use(helmet({
     useDefaults: true,
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://cdn.datatables.net', 'https://code.jquery.com', 'https://cdnjs.cloudflare.com'],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
       scriptSrcAttr: ["'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://fonts.googleapis.com', 'https://cdn.datatables.net'],
-      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'https://cdn.jsdelivr.net'],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      fontSrc: ["'self'"],
       imgSrc: ["'self'", 'data:', 'blob:'],
       connectSrc: ["'self'"],
       objectSrc: ["'none'"],
@@ -64,6 +73,11 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 app.use('/dist', express.static(path.join(__dirname, 'public', 'dist'), { immutable: true, maxAge: '1y' }));
+app.get('/assets/*', (req, res, next) => {
+  const hashedAsset = assetManifest[req.path];
+  if (!hashedAsset) return next();
+  return res.redirect(302, hashedAsset);
+});
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: 0, etag: true }));
 
 app.get('/api/health', (req, res) => {

@@ -75,6 +75,8 @@ document.getElementById('pageBody').innerHTML = `
     </div>
   </div>`;
 
+messagePage = deliveryUrl.number(deliveryUrl.keys.page);
+document.getElementById('statusFilter').value = deliveryUrl.read(deliveryUrl.keys.status);
 loadJobs();
 
 async function loadJobs() {
@@ -118,11 +120,11 @@ async function loadJobs() {
   }
 }
 
-window.selectJob = async (id) => {
+window.selectJob = async (id, { updateUrl = true } = {}) => {
   if (!id) return;
   activeJobId = id;
-  deliveryUrl.set({ job: id }, { replace: true });
-  messagePage = 1;
+  if (updateUrl) deliveryUrl.set({ [deliveryUrl.keys.job]: id, [deliveryUrl.keys.page]: 1 }, { replace: true });
+  messagePage = deliveryUrl.number(deliveryUrl.keys.page);
   await Promise.all([refreshJobDetail(id), loadJobMessages()]);
   await loadJobs();
   startPolling();
@@ -194,13 +196,29 @@ async function loadJobMessages() {
 
 window.resetMessagePage = () => {
   messagePage = 1;
+  deliveryUrl.set({
+    [deliveryUrl.keys.status]: document.getElementById('statusFilter').value,
+    [deliveryUrl.keys.page]: 1
+  });
   loadJobMessages();
 };
 
 window.changeMessagePage = (direction) => {
   messagePage = Math.max(1, messagePage + direction);
+  deliveryUrl.set({ [deliveryUrl.keys.page]: messagePage });
   loadJobMessages();
 };
+
+deliveryUrl.onPopState(() => {
+  document.getElementById('statusFilter').value = deliveryUrl.read(deliveryUrl.keys.status);
+  messagePage = deliveryUrl.number(deliveryUrl.keys.page);
+  const jobId = deliveryUrl.read(deliveryUrl.keys.job);
+  if (jobId && jobId !== activeJobId) {
+    window.selectJob(jobId, { updateUrl: false });
+  } else {
+    loadJobMessages();
+  }
+});
 
 window.retryFailed = async (button) => {
   if (!activeJobId) return;

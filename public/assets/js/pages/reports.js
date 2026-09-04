@@ -16,14 +16,23 @@ document.getElementById('pageBody').innerHTML = `
   </div>`;
 
 const reportsUrl = RMS.urlState;
-const reportTab = reportsUrl.read(reportsUrl.keys.tab, 'contacts');
-if (['contacts', 'birthday', 'campaign', 'delivery'].includes(reportTab) && reportTab !== 'contacts') {
-  const button = document.querySelector(`[data-bs-target="#${reportTab}"]`);
-  if (button) bootstrap.Tab.getOrCreateInstance(button).show();
+const REPORT_TABS = ['contacts', 'birthday', 'campaign', 'delivery'];
+let syncingReportTab = false;
+function showReportTab(tab) {
+  const selected = REPORT_TABS.includes(tab) ? tab : 'contacts';
+  const button = document.querySelector(`[data-bs-target="#${selected}"]`);
+  if (!button) return;
+  syncingReportTab = true;
+  bootstrap.Tab.getOrCreateInstance(button).show();
+  syncingReportTab = false;
 }
+const reportTab = reportsUrl.read(reportsUrl.keys.tab, 'contacts');
+showReportTab(reportTab);
 document.querySelectorAll('[data-bs-toggle="tab"]').forEach(button => button.addEventListener('shown.bs.tab', () => {
-  reportsUrl.set({ tab: button.dataset.bsTarget.slice(1) }, { replace: true });
+  if (syncingReportTab) return;
+  reportsUrl.set({ [reportsUrl.keys.tab]: button.dataset.bsTarget.slice(1) });
 }));
+reportsUrl.onPopState(() => showReportTab(reportsUrl.read(reportsUrl.keys.tab, 'contacts')));
 
 initReports();
 async function initReports() {

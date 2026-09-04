@@ -43,6 +43,17 @@ let birthdayCountsByDay = {};
 const birthdayUrl = RMS.urlState;
 const requestedMonth = birthdayUrl.read(birthdayUrl.keys.month);
 if (/^\d{4}-\d{2}$/.test(requestedMonth)) calDate = new Date(`${requestedMonth}-01T00:00:00`);
+const BIRTHDAY_TABS = ['today', 'upcoming', 'calendar', 'templates'];
+
+function calendarMonthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function showBirthdayTab(tab) {
+  const selected = BIRTHDAY_TABS.includes(tab) ? tab : 'today';
+  const button = document.querySelector(`[data-bs-target="#${selected}"]`);
+  if (button) bootstrap.Tab.getOrCreateInstance(button).show();
+}
 init();
 
 async function init() {
@@ -68,6 +79,10 @@ async function init() {
   document.getElementById('wishTemplate').innerHTML = templates.map(t => `<option value="${t._id}">${t.name}</option>`).join('');
 
   document.querySelector('[data-bs-target="#calendar"]')?.addEventListener('shown.bs.tab', loadCalendar);
+  document.querySelectorAll('[data-bs-toggle="tab"]').forEach((button) => button.addEventListener('shown.bs.tab', () => {
+    birthdayUrl.set({ [birthdayUrl.keys.tab]: button.dataset.bsTarget.slice(1) }, { replace: true });
+  }));
+  showBirthdayTab(birthdayUrl.read(birthdayUrl.keys.tab, 'today'));
   renderCalendar();
 }
 
@@ -113,7 +128,18 @@ function daysUntil(dob) {
   if (next < today) next.setFullYear(today.getFullYear()+1);
   return Math.ceil((next-today)/86400000);
 }
-window.changeMonth = (dir) => { calDate.setMonth(calDate.getMonth() + dir); birthdayUrl.set({ month: calDate.toISOString().slice(0, 7) }); loadCalendar(); };
+window.changeMonth = (dir) => {
+  calDate.setMonth(calDate.getMonth() + dir);
+  birthdayUrl.set({ [birthdayUrl.keys.month]: calendarMonthKey(calDate) });
+  loadCalendar();
+};
+
+birthdayUrl.onPopState(() => {
+  const month = birthdayUrl.read(birthdayUrl.keys.month);
+  if (/^\d{4}-\d{2}$/.test(month)) calDate = new Date(`${month}-01T00:00:00`);
+  showBirthdayTab(birthdayUrl.read(birthdayUrl.keys.tab, 'today'));
+  loadCalendar();
+});
 
 function renderCalendar() {
   const grid = document.getElementById('calendarGrid');

@@ -34,6 +34,9 @@ if (!TYPES.includes(activeType)) activeType = 'all';
 
 document.getElementById('typeTabs').innerHTML = TYPES.map(t => `<li class="nav-item"><button type="button" class="nav-link ${t===activeType?'active':''}" aria-pressed="${t === activeType}" onclick="filterType('${t}')">${t==='all'?'All':t.charAt(0).toUpperCase()+t.slice(1)}</button></li>`).join('');
 loadTemplates();
+document.getElementById('templateModal')?.addEventListener('hidden.bs.modal', () => {
+  RMS.urlState.set({ [RMS.urlState.keys.edit]: null }, { replace: true });
+});
 
 async function loadTemplates() {
   const res = await RMS.api.get('/templates');
@@ -51,7 +54,7 @@ function renderTemplates() {
       <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteTemplate('${t._id}')" aria-label="Delete template"><i class="bi bi-trash"></i></button></div>
     </div></div>`).join('');
 }
-window.filterType = (t) => {
+window.filterType = (t, { updateUrl = true } = {}) => {
   activeType = t;
   document.querySelectorAll('#typeTabs .nav-link').forEach((el, i) => {
     const selected = TYPES[i] === t;
@@ -59,9 +62,13 @@ window.filterType = (t) => {
     el.setAttribute('aria-pressed', String(selected));
   });
   renderTemplates();
-  RMS.urlState.set({ tab: t });
+  if (updateUrl) RMS.urlState.set({ [RMS.urlState.keys.tab]: t });
 };
-window.openTemplateModal = () => { document.getElementById('templateForm').reset(); document.getElementById('templateId').value=''; };
+window.openTemplateModal = () => {
+  document.getElementById('templateForm').reset();
+  document.getElementById('templateId').value = '';
+  RMS.urlState.set({ [RMS.urlState.keys.edit]: null }, { replace: true });
+};
 window.insertVar = (v) => { const body = document.getElementById('tmplBody'); if(body){ body.value += `{{${v}}}`; body.focus(); } else RMS.toast.show(`Variable {{${v}}} copied`,'info'); };
 window.saveTemplate = async (button) => {
   const data = { name: document.getElementById('tmplName').value, type: document.getElementById('tmplType').value, subject: document.getElementById('tmplSubject').value, body: document.getElementById('tmplBody').value, isDefault: document.getElementById('tmplDefault').checked, variables: ['Name','City','Sector','Company','Designation','Occupation'] };
@@ -77,11 +84,13 @@ window.saveTemplate = async (button) => {
   });
   if (result.ok) {
     bootstrap.Modal.getInstance(document.getElementById('templateModal')).hide();
+    RMS.urlState.set({ [RMS.urlState.keys.edit]: null }, { replace: true });
     await loadTemplates();
   }
 };
 window.editTemplate = (id) => {
   const t = allTemplates.find(x=>x._id===id); if(!t) return;
+  RMS.urlState.set({ [RMS.urlState.keys.edit]: t._id }, { replace: true });
   document.getElementById('templateId').value = t._id;
   document.getElementById('tmplName').value = t.name;
   document.getElementById('tmplType').value = t.type;
@@ -90,6 +99,12 @@ window.editTemplate = (id) => {
   document.getElementById('tmplDefault').checked = t.isDefault;
   new bootstrap.Modal(document.getElementById('templateModal')).show();
 };
+RMS.urlState.onPopState(() => {
+  const type = RMS.urlState.read(RMS.urlState.keys.tab, 'all');
+  window.filterType(TYPES.includes(type) ? type : 'all', { updateUrl: false });
+  const editId = RMS.urlState.read(RMS.urlState.keys.edit);
+  if (editId) window.editTemplate(editId);
+});
 window.deleteTemplate = (id) => RMS.components.confirmDelete(null, (button) => RMS.mutations.runMutation(button, async () => {
   await RMS.api.delete(`/templates/${id}`);
   await loadTemplates();

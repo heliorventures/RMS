@@ -130,6 +130,9 @@ const contactUrl = RMS.urlState;
 });
 initContactsTable();
 updateContactTotal();
+document.getElementById('contactModal')?.addEventListener('hidden.bs.modal', () => {
+  contactUrl.set({ [contactUrl.keys.edit]: null }, { replace: true });
+});
 
 function buildContactRow(c) {
   return [
@@ -184,10 +187,11 @@ function initContactsTable() {
       { data: 8, orderable: false }
     ],
     pageLength: 25,
+    displayStart: (contactUrl.number(contactUrl.keys.page) - 1) * 25,
     lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
     order: [],
     initComplete() {
-      const editId = RMS.utils.queryParams().edit;
+      const editId = contactUrl.read(contactUrl.keys.edit);
       if (editId && !requestedEditOpened) {
         requestedEditOpened = true;
         window.editContact(editId);
@@ -197,6 +201,13 @@ function initContactsTable() {
 
   const search = contactUrl.read(contactUrl.keys.search);
   if (search) table.search(search).draw();
+  $('#contactsTable').on('search.dt page.dt', () => {
+    const info = table.page.info();
+    contactUrl.set({
+      [contactUrl.keys.search]: table.search(),
+      [contactUrl.keys.page]: info.page + 1
+    }, { replace: true });
+  });
 }
 
 function updateContactTotal() {
@@ -214,6 +225,7 @@ window.openContactModal = () => {
   document.getElementById('contactForm').reset();
   document.getElementById('contactId').value = '';
   document.getElementById('contactModalTitle').textContent = 'Add Contact';
+  contactUrl.set({ [contactUrl.keys.edit]: null }, { replace: true });
 };
 
 window.editContact = async (id) => {
@@ -223,6 +235,7 @@ window.editContact = async (id) => {
     RMS.toast.show('Contact not found', 'error');
     return;
   }
+  contactUrl.set({ [contactUrl.keys.edit]: c._id }, { replace: true });
   document.getElementById('contactId').value = c._id;
   document.getElementById('contactModalTitle').textContent = 'Edit Contact';
   ['firstName','lastName','gender','mobile','whatsapp','email','religion','sector','occupation','company','designation','city','state','pincode','address','status','notes'].forEach(f => {
@@ -256,6 +269,7 @@ window.saveContact = async (button) => {
   });
   if (result.ok) {
     bootstrap.Modal.getInstance(document.getElementById('contactModal')).hide();
+    contactUrl.set({ [contactUrl.keys.edit]: null }, { replace: true });
     reloadTable();
   }
 };
@@ -285,7 +299,10 @@ contactUrl.onPopState(() => {
     activeFilters[key] = contactUrl.read(contactUrl.keys[key]);
     document.getElementById(`filter${key[0].toUpperCase()}${key.slice(1)}`).value = activeFilters[key];
   });
-  reloadTable();
+  const search = contactUrl.read(contactUrl.keys.search);
+  table.search(search).page(contactUrl.number(contactUrl.keys.page) - 1).draw('page');
+  const editId = contactUrl.read(contactUrl.keys.edit);
+  if (editId) window.editContact(editId);
 });
 
 window.exportContacts = async () => {

@@ -10,7 +10,7 @@
     "build:assets": "node scripts/build-assets.mjs",
     "check": "npm run build:assets && node --check server.js",
     "test:unit": "node --test test/*.test.js",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run build:assets && playwright test",
     "test:e2e:headed": "playwright test --headed",
     "seed:admin": "node server/seed/seed-admin.js",
     "seed:sample": "node server/seed/import-sample-data.js",
@@ -42,8 +42,12 @@
     "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.62.1",
     "bootstrap": "^5.3.3",
+    "bootstrap-icons": "^1.11.3",
+    "chart.js": "^4.4.4",
     "datatables.net": "^1.13.8",
     "datatables.net-bs5": "^1.13.8",
+    "esbuild": "^0.25.0",
+    "html2pdf.js": "^0.10.1",
     "jquery": "^3.7.1"
   }
 }

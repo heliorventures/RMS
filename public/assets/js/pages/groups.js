@@ -14,6 +14,10 @@ let activeGroupType = 'static';
 let activeMembers = [];
 let activeMemberPagination = { page: 1, pages: 1, total: 0 };
 const groupsUrl = RMS.urlState;
+document.getElementById('membersModal')?.addEventListener('hidden.bs.modal', () => {
+  activeGroupId = null;
+  groupsUrl.set({ [groupsUrl.keys.group]: null, [groupsUrl.keys.page]: null }, { replace: true });
+});
 
 init();
 
@@ -351,7 +355,10 @@ async function loadMembersPage(page) {
 
 window.changeGroupMemberPage = (direction) => {
   const nextPage = Math.max(1, Math.min(activeMemberPagination.pages, activeMemberPagination.page + direction));
-  if (nextPage !== activeMemberPagination.page) loadMembersPage(nextPage);
+  if (nextPage !== activeMemberPagination.page) {
+    groupsUrl.set({ [groupsUrl.keys.page]: nextPage });
+    loadMembersPage(nextPage);
+  }
 };
 
 window.openGroupModal = async () => {
@@ -451,11 +458,12 @@ async function reloadGroups() {
   renderGroups();
 }
 
-window.viewMembers = async (id) => {
+window.viewMembers = async (id, { updateUrl = true } = {}) => {
   activeGroupId = id;
-  groupsUrl.set({ group: id }, { replace: true });
+  if (updateUrl) groupsUrl.set({ [groupsUrl.keys.group]: id, [groupsUrl.keys.page]: 1 }, { replace: true });
+  const requestedPage = groupsUrl.number(groupsUrl.keys.page);
   const res = await RMS.requests.run('groups:members', ({ signal }) =>
-    RMS.api.get(`/groups/${id}?page=1&limit=100`, { signal })
+    RMS.api.get(`/groups/${id}?page=${requestedPage}&limit=100`, { signal })
   );
   if (!res) return;
   const { group, members } = res?.data || { group: {}, members: [] };
@@ -484,6 +492,19 @@ window.viewMembers = async (id) => {
 
   new bootstrap.Modal(document.getElementById('membersModal')).show();
 };
+
+groupsUrl.onPopState(() => {
+  const groupId = groupsUrl.read(groupsUrl.keys.group);
+  if (!groupId || !allGroups.some((group) => group._id === groupId)) {
+    bootstrap.Modal.getInstance(document.getElementById('membersModal'))?.hide();
+    return;
+  }
+  if (groupId !== activeGroupId) {
+    window.viewMembers(groupId, { updateUrl: false });
+    return;
+  }
+  loadMembersPage(groupsUrl.number(groupsUrl.keys.page));
+});
 
 window.saveMembers = async (button) => {
   if (!activeGroupId) return;

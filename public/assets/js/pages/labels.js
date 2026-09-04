@@ -589,8 +589,35 @@ window.downloadLabelsHtml = () => {
   RMS.toast.show('HTML file downloaded — open it and press Ctrl+P to print');
 };
 
+let html2pdfLoadPromise;
+
+function loadHtml2Pdf() {
+  if (window.html2pdf) return Promise.resolve(window.html2pdf);
+  if (html2pdfLoadPromise) return html2pdfLoadPromise;
+
+  html2pdfLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = '/assets/vendor/html2pdf/html2pdf.bundle.min.js';
+    script.async = true;
+    script.onload = () => window.html2pdf ? resolve(window.html2pdf) : reject(new Error('PDF library did not initialize'));
+    script.onerror = () => reject(new Error('PDF library could not be loaded'));
+    document.head.appendChild(script);
+  }).catch((error) => {
+    html2pdfLoadPromise = null;
+    throw error;
+  });
+
+  return html2pdfLoadPromise;
+}
+
 window.downloadLabelsPdf = async () => {
   if (!requireSelectedContacts()) return;
+  try {
+    await loadHtml2Pdf();
+  } catch (error) {
+    RMS.toast.show('PDF generator could not be loaded. Use Download HTML instead.', 'error');
+    return;
+  }
   if (typeof html2pdf === 'undefined') {
     RMS.toast.show('PDF library not loaded — use Download HTML instead', 'error');
     return;

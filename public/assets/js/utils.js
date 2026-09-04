@@ -2,14 +2,27 @@ window.RMS = window.RMS || {};
 
 window.RMS.utils = {
   locale: 'en-IN',
+  timeZone: 'Asia/Kolkata',
   formatDate(d) {
     if (!d) return '-';
-    return new Date(d).toLocaleDateString(this.locale, { day: '2-digit', month: 'short', year: 'numeric' });
+    return new Intl.DateTimeFormat(this.locale, {
+      timeZone: this.timeZone,
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    }).format(new Date(d));
   },
 
   formatDateTime(d) {
     if (!d) return '-';
-    return new Date(d).toLocaleString(this.locale, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return new Intl.DateTimeFormat(this.locale, {
+      timeZone: this.timeZone,
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(new Date(d));
   },
 
   getInitials(first, last) {

@@ -4,6 +4,7 @@ const templateSchema = new mongoose.Schema({
   name: { type: String, required: true },
   type: { type: String, enum: ['birthday', 'anniversary', 'festival', 'invitation', 'email', 'whatsapp'], required: true },
   subject: String,
+  whatsapp: { name: String, language: String, bodyParameters: [String] },
   body: { type: String, required: true },
   variables: [String],
   isDefault: { type: Boolean, default: false },

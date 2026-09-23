@@ -11,8 +11,16 @@ test('settings shows write-only provider credentials and omits blank secrets fro
   await expect(rms.page.locator('#whatsappCredentialState')).toContainText('Credential configured');
   await expect(rms.page.locator('#waKey')).toHaveAttribute('placeholder', 'Leave blank to keep the stored credential');
   await rms.page.getByRole('button', { name: 'Save WhatsApp' }).click();
+  await rms.page.locator('#waAppSecret').fill('test-app-secret');
+  await rms.page.locator('#waVerifyToken').fill('test-webhook-token');
+  await rms.page.getByRole('button', { name: 'Save WhatsApp' }).click();
+  await expect(rms.page.locator('#waAppSecret')).toHaveValue('');
+  await expect(rms.page.locator('#waVerifyToken')).toHaveValue('');
 
   const updates = rms.api.requests.filter(request => request.method === 'PUT' && request.pathname === '/api/settings');
   expect(updates[0].body.smtp).not.toHaveProperty('password');
   expect(updates[1].body.whatsapp).not.toHaveProperty('apiKey');
+  expect(updates[1].body.whatsapp).not.toHaveProperty('appSecret');
+  expect(updates[1].body.whatsapp).not.toHaveProperty('webhookVerifyToken');
+  expect(updates[2].body.whatsapp).toMatchObject({ appSecret: 'test-app-secret', webhookVerifyToken: 'test-webhook-token' });
 });

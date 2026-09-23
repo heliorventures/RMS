@@ -113,15 +113,18 @@ document.getElementById('pageBody').innerHTML = `
 
         <div class="row g-3">
 
-          <div class="col-12"><label class="form-label">API URL</label><input class="form-control" id="waUrl" placeholder="https://graph.facebook.com/v18.0"></div>
+          <div class="col-12"><label class="form-label" for="waUrl">Meta Graph API URL</label><input class="form-control" id="waUrl" placeholder="https://graph.facebook.com/v25.0"><small>Use a supported Graph API version from your Meta app.</small></div>
 
           <div class="col-md-6"><label class="form-label">API Key / Token</label><input class="form-control" id="waKey" type="password" placeholder="Leave blank to keep the stored credential"><small class="d-block text-secondary mt-1" id="whatsappCredentialState" role="status"></small></div>
+          <div class="col-md-6"><label class="form-label" for="waAppSecret">Meta App Secret</label><input class="form-control" id="waAppSecret" type="password" autocomplete="new-password" placeholder="Leave blank to keep the stored secret"><small id="waAppSecretState" role="status"></small></div>
+          <div class="col-md-6"><label class="form-label" for="waVerifyToken">Webhook Verify Token</label><input class="form-control" id="waVerifyToken" type="password" autocomplete="new-password" placeholder="Leave blank to keep the stored secret"><small id="waVerifyTokenState" role="status"></small><p class="small">Choose a long random token and enter the same value in Meta's webhook configuration. These secrets belong to the app/webhook, not a phone number.</p></div>
 
           <div class="col-md-6"><label class="form-label">Phone Number ID</label><input class="form-control" id="waPhoneId"></div>
 
           <div class="col-12"><label class="form-label">Business Account ID</label><input class="form-control" id="waBusinessId"></div>
 
-          <div class="col-12"><button class="btn btn-primary" onclick="saveSettings(this, 'whatsapp')">Save WhatsApp Settings</button></div>
+          <div class="col-12"><button class="btn btn-primary" onclick="saveSettings(this, 'whatsapp')">Save WhatsApp Settings</button> <button class="btn btn-outline-secondary" onclick="verifyWhatsApp(this)">Check saved configuration</button></div>
+          <div class="col-12"><p class="small">Webhook URL: <code>/api/webhooks/whatsapp</code>. Save the app secret and verification token here, then configure the Meta messages subscription. A connection check does not confirm webhook delivery.</p><label for="waTestNumber" class="form-label">Test recipient number (with country code)</label><input id="waTestNumber" class="form-control" type="tel" placeholder="+91…"><small>Use an active contact with permission recorded on their Contact Profile.</small><div class="mt-2"><button class="btn btn-outline-primary" onclick="testWhatsApp(this)">Choose template and queue test</button></div></div>
 
         </div>
 
@@ -266,6 +269,10 @@ async function loadSettings() {
   document.getElementById('waUrl').value = wa.apiUrl || '';
 
   document.getElementById('waKey').value = '';
+  document.getElementById('waAppSecret').value = '';
+  document.getElementById('waVerifyToken').value = '';
+  document.getElementById('waAppSecretState').textContent = wa.appSecretConfigured ? 'Configured (saved or server fallback). Leave blank to keep it.' : 'Not configured.';
+  document.getElementById('waVerifyTokenState').textContent = wa.webhookVerifyTokenConfigured ? 'Configured (saved or server fallback). Leave blank to keep it.' : 'Not configured.';
 
   document.getElementById('whatsappCredentialState').textContent = wa.configured
     ? 'Credential configured. Leave blank to keep it.'
@@ -626,6 +633,10 @@ function settingsPayload(section) {
     const whatsapp = { apiUrl: document.getElementById('waUrl').value, phoneNumberId: document.getElementById('waPhoneId').value, businessAccountId: document.getElementById('waBusinessId').value };
     const apiKey = document.getElementById('waKey').value;
     if (apiKey.trim()) whatsapp.apiKey = apiKey;
+    for (const [field, id] of [['appSecret', 'waAppSecret'], ['webhookVerifyToken', 'waVerifyToken']]) {
+      const value = document.getElementById(id).value.trim();
+      if (value) whatsapp[field] = value;
+    }
     return { whatsapp };
   }
   if (section === 'theme') return { theme: { primaryColor: document.getElementById('themeColor').value, darkMode: document.getElementById('darkMode').checked }, autoBirthdayWish: document.getElementById('autoBirthday').checked, autoAnniversaryWish: document.getElementById('autoAnniversary').checked };
@@ -657,6 +668,14 @@ window.saveSettings = async (button, section) => {
     document.getElementById('waKey').value = '';
     document.getElementById('whatsappCredentialState').textContent = 'Credential configured. Leave blank to keep it.';
   }
+  if (section === 'whatsapp') {
+    for (const [field, id, stateId] of [['appSecret', 'waAppSecret', 'waAppSecretState'], ['webhookVerifyToken', 'waVerifyToken', 'waVerifyTokenState']]) {
+      if (payload.whatsapp[field]) {
+        document.getElementById(id).value = '';
+        document.getElementById(stateId).textContent = 'Configured. Leave blank to keep it.';
+      }
+    }
+  }
   return result;
 };
 
@@ -668,5 +687,14 @@ window.testSmtp = (button) => RMS.mutations.runMutation(button, async () => {
   pending: 'Testing…',
   success: 'Test email sent successfully'
 });
+
+window.verifyWhatsApp = (button) => RMS.mutations.runMutation(button, () => RMS.api.post('/delivery/verify-whatsapp', {}), {
+  form: '#whatsappForm', pending: 'Checking...',
+  success: (response) => response.data.webhookConfigured ? 'Meta credentials verified. Confirm webhook delivery with a test.' : 'Meta credentials verified. Webhook secrets still need configuration in Settings.'
+});
+window.testWhatsApp = (button) => RMS.mutations.runMutation(button, async () => {
+  const payload = await RMS.utils.withWhatsAppTemplate({ channel: 'whatsapp', to: document.getElementById('waTestNumber').value });
+  return RMS.api.post('/delivery/test-whatsapp', payload);
+}, { form: '#whatsappForm', pending: 'Queueing...', success: 'Test queued. Follow its status in Delivery; queueing does not confirm delivery.' });
 
 } // end admin-only settings

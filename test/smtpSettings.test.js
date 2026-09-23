@@ -52,6 +52,6 @@ test('does not expose the SMTP password in an admin settings response', () => {
       user: 'mailer@example.com',
       configured: true
     },
-    whatsapp: { configured: false }
+    whatsapp: { configured: false, appSecretConfigured: false, webhookVerifyTokenConfigured: false }
   });
 });

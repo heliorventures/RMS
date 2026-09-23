@@ -71,6 +71,30 @@ async function loadProfile(contactId) {
         </div></div>
       </div>
     </div>`;
+  if (RMS.auth.isAdmin() && (c.whatsapp || c.mobile)) await renderWhatsAppConsent(contactId);
+}
+
+async function renderWhatsAppConsent(contactId) {
+  const panel = document.createElement('div');
+  panel.className = 'card mt-3';
+  panel.innerHTML = '<div class="card-body" id="waConsentForm"><h6>WhatsApp permission</h6><p id="waConsentState" role="status">Loading...</p><label for="waConsentSource" class="form-label">Permission source or opt-out reason</label><input id="waConsentSource" class="form-control mb-2" maxlength="500" placeholder="For example: signup form, date and reference"><p class="small">Record permission only when the recipient has agreed to receive your messages. It applies to this phone number across all contacts. STOP replies withdraw permission automatically.</p><button class="btn btn-primary me-2" id="waConsentGrant" disabled>Record permission</button><button class="btn btn-outline-danger" id="waConsentWithdraw" disabled>Withdraw permission</button></div>';
+  document.getElementById('info').append(panel);
+  let phone;
+  const reload = async () => {
+    const response = await RMS.api.get(`/contacts/${contactId}/whatsapp-consent`);
+    phone = response.data.phone;
+    panel.querySelector('#waConsentState').textContent = `${phone}: ${response.data.status}${response.data.changedAt ? ` (${RMS.utils.formatDateTime(response.data.changedAt)})` : ''}`;
+    panel.querySelectorAll('button').forEach(b => { b.disabled = false; });
+  };
+  try { await reload(); } catch (error) { panel.querySelector('#waConsentState').textContent = error.message; return; }
+  for (const [selector, status] of [['#waConsentGrant', 'granted'], ['#waConsentWithdraw', 'withdrawn']]) {
+    panel.querySelector(selector).addEventListener('click', async (event) => {
+      const source = panel.querySelector('#waConsentSource').value.trim();
+      if (!source) return RMS.mutations.showValidationError('#waConsentForm', 'Enter the permission source or opt-out reason.', '#waConsentSource');
+      const result = await RMS.mutations.runMutation(event.currentTarget, () => RMS.api.put(`/contacts/${contactId}/whatsapp-consent`, { phone, status, source }), { form: '#waConsentForm', pending: 'Saving...', success: 'WhatsApp permission updated' });
+      if (result.ok) await reload();
+    });
+  }
 }
 
 function infoItem(label, value) {

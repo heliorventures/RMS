@@ -107,9 +107,9 @@ async function recountJobStats(jobId) {
   };
 
   messages.forEach(m => {
-    if (['sent', 'delivered', 'failed', 'skipped'].includes(m.status)) stats.processed++;
+    if (['sent', 'delivered', 'read', 'failed', 'skipped'].includes(m.status)) stats.processed++;
     if (m.status === 'sent') stats.sent++;
-    if (m.status === 'delivered') stats.delivered++;
+    if (['delivered', 'read'].includes(m.status)) stats.delivered++;
     if (m.status === 'failed') stats.failed++;
     if (m.status === 'skipped') stats.skipped++;
     if (m.status === 'pending' || m.status === 'scheduled') stats.pending++;
@@ -129,15 +129,15 @@ async function updateCampaign(id, updates) {
 }
 
 async function requeueFailedMessages(jobId) {
-  const filter = { jobId, status: 'failed' };
-  await Message.updateMany(filter, {
+  const filter = { jobId, status: 'failed', outcomeUncertain: { $ne: true } };
+  const result = await Message.updateMany(filter, {
     status: 'pending',
     retryCount: 0,
     nextRetryAt: null,
     error: null,
     failureReason: null
   });
-  return Message.countDocuments({ jobId, status: 'pending' });
+  return result.modifiedCount;
 }
 
 module.exports = {

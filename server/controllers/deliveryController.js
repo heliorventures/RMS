@@ -5,6 +5,8 @@ const emailService = require('../services/emailService');
 const logger = require('../utils/logger');
 const { normalizeSchedule } = require('../time/schedule');
 const { getProviderCapabilities } = require('../services/providerCapabilities');
+const { loadMapping, renderMapping } = require('../services/whatsappTemplates');
+const { normalizePhone } = require('../services/whatsappConsent');
 
 const DEFAULT_MAX_RETRIES = Number(process.env.DELIVERY_MAX_RETRIES) || 3;
 const DEFAULT_BATCH = Number(process.env.DELIVERY_BATCH_SIZE) || 25;
@@ -27,11 +29,18 @@ async function createDeliveryJob(req, res) {
       scheduleTimezone
     } = req.body;
 
-    if (!body && !subject) {
+    if (!['email', 'whatsapp', 'both', 'sms'].includes(channel)) return res.status(400).json({ success: false, message: 'Unsupported delivery channel.' });
+    if (!body && !subject && channel !== 'whatsapp') {
       return res.status(400).json({ success: false, message: 'Subject or body is required.' });
     }
     if (channel === 'sms') {
       return res.status(400).json({ success: false, code: 'PROVIDER_UNAVAILABLE', message: 'SMS provider is not configured' });
+    }
+    let whatsappMapping;
+    if (['whatsapp', 'both'].includes(channel)) {
+      const capabilities = getProviderCapabilities(await messageStore.getSettings());
+      if (!capabilities.whatsapp.enabled) return res.status(400).json({ success: false, message: capabilities.whatsapp.reason });
+      whatsappMapping = await loadMapping(req.body.templateId);
     }
     const schedule = normalizeSchedule({ scheduledAt, scheduleTimezone });
     const isFutureSchedule = schedule.scheduledAt && schedule.scheduledAt.getTime() > Date.now();
@@ -75,8 +84,13 @@ async function createDeliveryJob(req, res) {
     const messageRows = [];
     finalRecipients.forEach(contact => {
       channels.forEach(ch => {
-        const validation = validateRecipient(ch, contact);
-        const recipient = ch === 'email' ? contact.email : (contact.whatsapp || contact.mobile);
+        let validation = validateRecipient(ch, contact);
+        let recipient = ch === 'email' ? contact.email : (contact.whatsapp || contact.mobile);
+        let whatsappTemplate;
+        if (ch === 'whatsapp') {
+          try { recipient = normalizePhone(recipient); whatsappTemplate = renderMapping(whatsappMapping, contact); }
+          catch (error) { validation = { valid: false, reason: error.message }; }
+        }
         messageRows.push({
           jobId: job._id,
           contactId: contact._id,
@@ -84,6 +98,7 @@ async function createDeliveryJob(req, res) {
           contactName: `${contact.firstName || ''} ${contact.lastName || ''}`.trim(),
           recipient: recipient || '',
           type: ch,
+          ...(whatsappTemplate ? { whatsappTemplate } : {}),
           subject: applyTemplate(subject || '', contact),
           body: applyTemplate(body || '', contact),
           status: validation.valid ? (isFutureSchedule ? 'scheduled' : 'pending') : 'skipped',
@@ -166,10 +181,11 @@ async function retryFailed(req, res) {
 
     const count = await messageStore.requeueFailedMessages(job._id);
     const stats = await messageStore.recountJobStats(job._id);
-    await messageStore.updateJob(job._id, { status: 'queued', stats, completedAt: null });
+    if (count > 0) await messageStore.updateJob(job._id, { status: 'queued', stats, completedAt: null });
+    else await require('../services/deliveryQueue').finalizeJob(job._id);
 
     logger.info('Failed messages requeued', { jobId: job._id, count });
-    res.json({ success: true, data: { requeued: count, stats }, message: `${count} failed messages requeued` });
+    res.json({ success: true, data: { requeued: count, stats }, message: count ? `${count} failed messages requeued` : 'No eligible messages to retry. Uncertain WhatsApp outcomes require checking Meta logs before creating a new delivery.' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

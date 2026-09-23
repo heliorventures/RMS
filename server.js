@@ -68,6 +68,8 @@ const authLimiter = rateLimit({
   message: { success: false, message: 'Too many authentication attempts. Try again later.' }
 });
 
+// Meta signs raw bytes. Mount before JSON parsing and user-authenticated API routes.
+app.use('/api/webhooks/whatsapp', require('./server/routes/whatsappWebhook'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -99,6 +101,7 @@ app.use('/api', require('./server/routes/misc'));
 
 async function start() {
   await connectDB();
+  await require('./server/models/WhatsAppConsent').init();
 
   app.listen(PORT, () => {
     console.log(`RMS Server running at http://localhost:${PORT}`);

@@ -1,7 +1,6 @@
 const logger = require('../utils/logger');
 const messageStore = require('./messageStore');
 const emailService = require('./emailService');
-const whatsappService = require('./whatsappService');
 const { validateEmail, validatePhone } = require('../utils/validators');
 const { applyTemplate } = require('../utils/recipients');
 
@@ -19,6 +18,7 @@ function retryDelayMs(retryCount, baseDelay) {
 }
 
 async function processMessage(message, settings, job) {
+  if (message.type === 'whatsapp') return require('./whatsappDelivery').dispatchWhatsApp(message, settings, job);
   const maxRetries = message.maxRetries ?? job?.config?.maxRetries ?? DEFAULT_MAX_RETRIES;
   const baseDelay = job?.config?.retryDelayMs ?? DEFAULT_RETRY_DELAY;
   const contactName = message.contactName || 'Contact';
@@ -50,12 +50,6 @@ async function processMessage(message, settings, job) {
       subject: message.subject,
       body: message.body,
       fromName: settings.smtp?.fromName
-    });
-  } else if (message.type === 'whatsapp') {
-    result = await whatsappService.sendWhatsApp({
-      settings,
-      to: validation.value,
-      body: message.body
     });
   } else {
     result = { success: false, error: 'SMS channel not yet implemented' };
@@ -176,6 +170,7 @@ async function processBatch() {
   processing = true;
 
   try {
+    await require('./whatsappDelivery').recoverInterruptedWhatsApp();
     const settings = await messageStore.getSettings();
     const batchSize = DEFAULT_BATCH;
     const pending = await messageStore.getPendingMessages(batchSize);
@@ -224,4 +219,4 @@ function stopDeliveryWorker() {
   timer = null;
 }
 
-module.exports = { startDeliveryWorker, stopDeliveryWorker, processBatch };
+module.exports = { startDeliveryWorker, stopDeliveryWorker, processBatch, finalizeJob };

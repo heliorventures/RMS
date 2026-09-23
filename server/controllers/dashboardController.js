@@ -84,7 +84,7 @@ const dashboardController = {
         Message.countDocuments(messagesTodayFilter),
         Message.countDocuments({ status: { $in: ['pending', 'scheduled'] } }),
         Message.countDocuments({ type: 'email', status: 'sent' }),
-        Message.countDocuments({ type: 'whatsapp', status: 'sent' }),
+        Message.countDocuments({ type: 'whatsapp', status: { $in: ['sent', 'delivered', 'read'] } }),
         Campaign.countDocuments({ status: { $in: ['running', 'scheduled'] } }),
         birthdaysByMonth(),
         countBy('sector'),

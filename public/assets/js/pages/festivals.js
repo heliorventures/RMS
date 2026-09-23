@@ -102,7 +102,7 @@ async function queueFestivalDeliveryRaw(festival, setPhase = () => {}) {
     scheduledAt: festival.scheduledAt || null,
     scheduleTimezone: festival.scheduleTimezone || RMS.datetime.browserTimezone()
   };
-  const jobRes = await RMS.api.post('/delivery/jobs', payload);
+  const jobRes = await RMS.api.post('/delivery/jobs', await RMS.utils.withWhatsAppTemplate(payload));
   setPhase('updating-status');
   await RMS.api.put(`/festivals/${festival._id}`, { status: 'scheduled', sentCount: jobRes.data?.stats?.total || 0 });
   return {

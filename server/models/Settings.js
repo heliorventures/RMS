@@ -20,6 +20,8 @@ const settingsSchema = new mongoose.Schema({
   whatsapp: {
     apiUrl: String,
     apiKey: mongoose.Schema.Types.Mixed,
+    appSecret: mongoose.Schema.Types.Mixed,
+    webhookVerifyToken: mongoose.Schema.Types.Mixed,
     phoneNumberId: String,
     businessAccountId: String
   },

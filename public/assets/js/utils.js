@@ -40,7 +40,7 @@ window.RMS.utils = {
     const map = {
       Active: 'badge-active', Inactive: 'badge-inactive', VIP: 'badge-vip',
       draft: 'badge-draft', scheduled: 'badge-scheduled', sent: 'badge-sent',
-      completed: 'badge-completed', delivered: 'badge-sent', pending: 'badge-scheduled',
+      completed: 'badge-completed', delivered: 'badge-sent', read: 'badge-completed', pending: 'badge-scheduled',
       failed: 'badge-inactive', skipped: 'badge-draft', processing: 'badge-scheduled',
       queued: 'badge-scheduled', partial: 'badge-vip', running: 'badge-scheduled'
     };
@@ -56,7 +56,7 @@ window.RMS.utils = {
   async queueDeliveryJob(payload, options = {}) {
     const result = await window.RMS.mutations.runMutation(
       options.button,
-      () => window.RMS.api.post('/delivery/jobs', payload),
+      async () => window.RMS.api.post('/delivery/jobs', await this.withWhatsAppTemplate(payload)),
       {
         form: options.form,
         errorTarget: options.errorTarget,
@@ -80,6 +80,32 @@ window.RMS.utils = {
     if (!result.ok) return null;
     if (options.redirect) window.location.href = options.redirect;
     return result.value.data;
+  },
+
+  async withWhatsAppTemplate(payload) {
+    if (!['whatsapp', 'both'].includes(payload.channel) || payload.templateId) return payload;
+    const response = await window.RMS.api.get('/templates');
+    const templates = (response.data || []).filter(t => t.isActive !== false && t.whatsapp?.name && t.whatsapp?.language);
+    if (!templates.length) throw new Error('Add a Meta WhatsApp mapping in Templates before sending.');
+    // One reusable picker serves campaigns, greetings, festivals, invitations and tests.
+    const dialog = document.createElement('dialog');
+    dialog.className = 'rounded border p-4';
+    dialog.style.maxWidth = 'min(95vw, 520px)';
+    dialog.innerHTML = '<form method="dialog"><h5 id="waPickerTitle">Choose WhatsApp template</h5><p class="small">WhatsApp sends the approved Meta template. Email continues to use your message body.</p><label for="waPicker" class="form-label">Template</label><select id="waPicker" class="form-select mb-3"></select><p class="small" id="waPickerDetails"></p><div class="d-flex gap-2 justify-content-end"><button type="submit" class="btn btn-secondary" value="cancel">Cancel</button><button type="submit" class="btn btn-primary" value="send">Use template</button></div></form>';
+    dialog.setAttribute('aria-labelledby', 'waPickerTitle');
+    const select = dialog.querySelector('select');
+    templates.forEach(t => select.add(new Option(`${t.name} (${t.whatsapp.language})`, t._id)));
+    const showDetails = () => { const t = templates.find(t => t._id === select.value); dialog.querySelector('#waPickerDetails').textContent = `Meta: ${t.whatsapp.name}. Body parameters: ${(t.whatsapp.bodyParameters || []).join(', ') || 'none'}`; };
+    select.addEventListener('change', showDetails);
+    showDetails();
+    (document.querySelector('.modal.show') || document.body).append(dialog);
+    const templateId = await new Promise(resolve => {
+      dialog.addEventListener('close', () => resolve(dialog.returnValue === 'send' ? select.value : null), { once: true });
+      dialog.showModal();
+    });
+    dialog.remove();
+    if (!templateId) throw new Error('WhatsApp send cancelled.');
+    return { ...payload, templateId };
   },
 
   debounce(fn, delay = 300) {

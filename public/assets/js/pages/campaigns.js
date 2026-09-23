@@ -106,6 +106,7 @@ window.scheduleCampaign = async (button) => {
 
   let campaignSaved = false;
   const result = await RMS.mutations.runMutation(button, async () => {
+    const selection = await RMS.utils.withWhatsAppTemplate({ channel: data.channel });
     const campaign = await RMS.api.post('/campaigns', data);
     campaignSaved = true;
     return RMS.api.post('/delivery/jobs', {
@@ -115,6 +116,7 @@ window.scheduleCampaign = async (button) => {
       subject: data.name,
       body: data.content || 'Hello {{Name}}',
       campaignId: campaign.data._id,
+      templateId: selection.templateId,
       audience: 'all',
       ...schedule
     });

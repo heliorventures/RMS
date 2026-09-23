@@ -1,6 +1,7 @@
 const express = require('express');
 const deliveryController = require('../controllers/deliveryController');
-const { auth } = require('../middleware/auth');
+const { auth, requireAdmin } = require('../middleware/auth');
+const whatsapp = require('../controllers/whatsappController');
 
 const router = express.Router();
 router.use(auth);
@@ -12,6 +13,8 @@ router.get('/jobs/:id', deliveryController.getJob);
 router.get('/jobs/:id/messages', deliveryController.getJobMessages);
 router.post('/jobs/:id/retry-failed', deliveryController.retryFailed);
 router.post('/test-email', deliveryController.testEmail);
+router.post('/verify-whatsapp', requireAdmin, whatsapp.verify);
+router.post('/test-whatsapp', requireAdmin, whatsapp.testSend);
 router.get('/logs', deliveryController.getLogs);
 
 module.exports = router;

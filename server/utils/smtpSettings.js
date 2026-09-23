@@ -1,5 +1,6 @@
 const SMTP_FIELDS = ['host', 'port', 'user', 'fromEmail', 'fromName'];
 const WHATSAPP_FIELDS = ['apiUrl', 'phoneNumberId', 'businessAccountId'];
+const { webhookSecretState } = require('../security/whatsappSecrets');
 
 function hasStoredSecret(value) {
   return typeof value === 'string' ? Boolean(value.trim()) : Boolean(value?.ciphertext);
@@ -20,9 +21,12 @@ function buildProviderSettingsUpdate({ smtp, whatsapp } = {}, cipher) {
     if (!cipher) throw new Error('Settings encryption is required before storing an SMTP credential.');
     update['smtp.password'] = cipher.encrypt(smtp.password);
   }
-  if (typeof whatsapp?.apiKey === 'string' && whatsapp.apiKey.trim()) {
-    if (!cipher) throw new Error('Settings encryption is required before storing a WhatsApp credential.');
-    update['whatsapp.apiKey'] = cipher.encrypt(whatsapp.apiKey);
+  for (const key of ['apiKey', 'appSecret', 'webhookVerifyToken']) {
+    if (whatsapp?.[key] !== undefined && typeof whatsapp[key] !== 'string') throw Object.assign(new Error('WhatsApp secrets must be text.'), { status: 400 });
+    if (typeof whatsapp?.[key] === 'string' && whatsapp[key].trim()) {
+      if (!cipher) throw new Error('Settings encryption is required before storing a WhatsApp credential.');
+      update[`whatsapp.${key}`] = cipher.encrypt(whatsapp[key].trim());
+    }
   }
   return update;
 }
@@ -41,8 +45,8 @@ function sanitizeSettingsForUser(settings, user) {
     };
   }
   const { password, ...smtp } = plain?.smtp || {};
-  const { apiKey, ...whatsapp } = plain?.whatsapp || {};
-  return { ...plain, smtp: { ...smtp, configured: hasStoredSecret(password) }, whatsapp: { ...whatsapp, configured: hasStoredSecret(apiKey) } };
+  const { apiKey, appSecret, webhookVerifyToken, ...whatsapp } = plain?.whatsapp || {};
+  return { ...plain, smtp: { ...smtp, configured: hasStoredSecret(password) }, whatsapp: { ...whatsapp, configured: hasStoredSecret(apiKey), ...webhookSecretState({ appSecret, webhookVerifyToken }) } };
 }
 
 module.exports = { buildSmtpSettingsUpdate, buildProviderSettingsUpdate, sanitizeSettingsForUser, hasStoredSecret };

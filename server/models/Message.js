@@ -15,9 +15,16 @@ const messageSchema = new mongoose.Schema({
   type: { type: String, enum: ['email', 'whatsapp', 'sms'], required: true },
   subject: String,
   body: String,
+  whatsappTemplate: { name: String, language: String, bodyParameters: [String] },
+  providerMessageId: String,
+  providerAttemptId: String,
+  providerAttemptNumber: { type: Number, default: 0 },
+  providerPhoneNumberId: String,
+  outcomeUncertain: Boolean,
+  readAt: Date,
   status: {
     type: String,
-    enum: ['pending', 'processing', 'sent', 'delivered', 'failed', 'skipped', 'scheduled'],
+    enum: ['pending', 'processing', 'sent', 'delivered', 'read', 'failed', 'skipped', 'scheduled'],
     default: 'pending'
   },
   scheduledAt: Date,
@@ -33,6 +40,8 @@ const messageSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 messageSchema.index({ jobId: 1, status: 1 });
+messageSchema.index({ providerAttemptId: 1 }, { sparse: true });
+messageSchema.index({ providerMessageId: 1 }, { sparse: true });
 messageSchema.index({ status: 1, scheduledAt: 1, nextRetryAt: 1 });
 
 module.exports = mongoose.model('Message', messageSchema);

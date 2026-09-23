@@ -22,6 +22,11 @@ document.getElementById('pageBody').innerHTML = `
         <div class="col-md-4"><label class="form-label">Type</label><select class="form-select" id="tmplType"><option value="birthday">Birthday</option><option value="anniversary">Anniversary</option><option value="festival">Festival</option><option value="invitation">Invitation</option><option value="email">Email</option><option value="whatsapp">WhatsApp</option></select></div>
         <div class="col-12"><label class="form-label">Subject</label><input class="form-control" id="tmplSubject"></div>
         <div class="col-12"><label class="form-label">Body *</label><textarea class="form-control" id="tmplBody" rows="8" required></textarea></div>
+        <div class="col-12"><details><summary>WhatsApp / Meta template mapping</summary><p class="small mt-2">Create and approve the template in WhatsApp Manager first. This mapping supports text templates with positional body parameters. Media, dynamic buttons and named parameters are not supported.</p>
+          <label for="tmplWaName" class="form-label">Exact Meta template name</label><input id="tmplWaName" class="form-control" placeholder="birthday_greeting">
+          <label for="tmplWaLanguage" class="form-label mt-2">Language code</label><input id="tmplWaLanguage" class="form-control" placeholder="en_US">
+          <label for="tmplWaParams" class="form-label mt-2">Body parameters, one per line, in Meta order</label><textarea id="tmplWaParams" class="form-control" rows="3" placeholder="{{Name}}"></textarea><small>Use contact variables above or literal text. Leave empty for a template without variables. Saving here does not submit or approve a Meta template.</small>
+        </details></div>
         <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" id="tmplDefault"><label class="form-check-label">Set as default for this type</label></div></div>
       </div>
     </form></div>
@@ -73,6 +78,8 @@ window.insertVar = (v) => { const body = document.getElementById('tmplBody'); if
 window.saveTemplate = async (button) => {
   const data = { name: document.getElementById('tmplName').value, type: document.getElementById('tmplType').value, subject: document.getElementById('tmplSubject').value, body: document.getElementById('tmplBody').value, isDefault: document.getElementById('tmplDefault').checked, variables: ['Name','City','Sector','Company','Designation','Occupation'] };
   if (!data.name.trim()) return RMS.mutations.showValidationError('#templateForm', 'Template name is required', '#tmplName');
+  data.whatsapp = { name: document.getElementById('tmplWaName').value.trim(), language: document.getElementById('tmplWaLanguage').value.trim(), bodyParameters: document.getElementById('tmplWaParams').value.trim() ? document.getElementById('tmplWaParams').value.trim().split(/\r?\n/) : [] };
+  if (data.whatsapp.name && !data.whatsapp.language) return RMS.mutations.showValidationError('#templateForm', 'Enter the Meta language code', '#tmplWaLanguage');
   if (!data.body.trim()) return RMS.mutations.showValidationError('#templateForm', 'Template body is required', '#tmplBody');
   const id = document.getElementById('templateId').value;
   const result = await RMS.mutations.runMutation(button, () => id
@@ -96,6 +103,9 @@ window.editTemplate = (id) => {
   document.getElementById('tmplType').value = t.type;
   document.getElementById('tmplSubject').value = t.subject||'';
   document.getElementById('tmplBody').value = t.body;
+  document.getElementById('tmplWaName').value = t.whatsapp?.name || '';
+  document.getElementById('tmplWaLanguage').value = t.whatsapp?.language || '';
+  document.getElementById('tmplWaParams').value = (t.whatsapp?.bodyParameters || []).join('\n');
   document.getElementById('tmplDefault').checked = t.isDefault;
   new bootstrap.Modal(document.getElementById('templateModal')).show();
 };

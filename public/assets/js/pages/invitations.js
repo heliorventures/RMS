@@ -217,7 +217,7 @@ async function queueEventDeliveryRaw(event, setPhase = () => {}) {
   }
 
   setPhase('queueing');
-  const jobRes = await RMS.api.post('/delivery/jobs', payload);
+  const jobRes = await RMS.api.post('/delivery/jobs', await RMS.utils.withWhatsAppTemplate(payload));
   setPhase('updating-status');
   await RMS.api.put(`/events/${event._id}`, { status: 'scheduled' });
   return {

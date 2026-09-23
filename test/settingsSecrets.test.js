@@ -32,7 +32,7 @@ test('admin settings response exposes configured state but no provider secret', 
   assert.deepEqual(result, {
     company: { name: 'RMS' },
     smtp: { host: 'smtp.test', user: 'mailer@test', configured: true },
-    whatsapp: { phoneNumberId: 'phone-id', configured: true }
+    whatsapp: { phoneNumberId: 'phone-id', configured: true, appSecretConfigured: false, webhookVerifyTokenConfigured: false }
   });
   assert.equal(JSON.stringify(result).includes('ciphertext'), false);
 });

@@ -42,6 +42,7 @@ document.getElementById('pageBody').innerHTML = `
           <div class="row g-2 mb-3" id="jobStats"></div>
           <div class="progress mb-2" style="height:10px" id="jobProgress" role="progressbar" aria-labelledby="jobProgressText" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
             <div class="progress-bar bg-success" id="progDelivered" style="width:0%"></div>
+            <div class="progress-bar bg-info" id="progSent" style="width:0%"></div>
             <div class="progress-bar bg-danger" id="progFailed" style="width:0%"></div>
             <div class="progress-bar bg-warning" id="progPending" style="width:0%"></div>
           </div>
@@ -55,7 +56,9 @@ document.getElementById('pageBody').innerHTML = `
           <select class="form-select form-select-sm w-auto" id="statusFilter" onchange="resetMessagePage()">
             <option value="">All statuses</option>
             <option value="pending">Pending</option>
+            <option value="sent">Sent (awaiting delivery)</option>
             <option value="delivered">Delivered</option>
+            <option value="read">Read</option>
             <option value="failed">Failed</option>
             <option value="skipped">Skipped</option>
           </select>
@@ -97,7 +100,7 @@ async function loadJobs() {
 
   document.getElementById('jobsList').innerHTML = jobs.map(j => {
     const s = j.stats || {};
-    const pct = s.total ? Math.round(((s.delivered || 0) + (s.failed || 0) + (s.skipped || 0)) / s.total * 100) : 0;
+    const pct = s.total ? Math.round((s.processed || 0) / s.total * 100) : 0;
     return `
       <button type="button" class="list-group-item list-group-item-action border-0 border-bottom py-3 ${activeJobId === j._id ? 'active' : ''}" onclick="selectJob('${j._id}')">
         <div class="d-flex justify-content-between align-items-start">
@@ -146,6 +149,7 @@ async function refreshJobDetail(id) {
 
   document.getElementById('jobStats').innerHTML = [
     ['Total', s.total, 'primary'],
+    ['Sent', s.sent, 'info'],
     ['Delivered', s.delivered, 'success'],
     ['Failed', s.failed, 'danger'],
     ['Skipped', s.skipped, 'secondary'],
@@ -160,6 +164,7 @@ async function refreshJobDetail(id) {
   const processedPercent = s.total ? Math.round(((s.processed || 0) / s.total) * 100) : 0;
   document.getElementById('jobProgress').setAttribute('aria-valuenow', String(processedPercent));
   document.getElementById('progDelivered').style.width = `${((s.delivered || 0) / total) * 100}%`;
+  document.getElementById('progSent').style.width = `${((s.sent || 0) / total) * 100}%`;
   document.getElementById('progFailed').style.width = `${((s.failed || 0) / total) * 100}%`;
   document.getElementById('progPending').style.width = `${((s.pending || 0) / total) * 100}%`;
   document.getElementById('jobProgressText').textContent = `${s.processed || 0} of ${s.total} processed · ${s.retrying || 0} retrying`;

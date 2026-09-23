@@ -25,12 +25,18 @@ const settingsController = {
   async update(req, res) {
     try {
       const { smtp, whatsapp, ...settingsFields } = req.body || {};
+      if (whatsapp) {
+        const current = await Settings.findOne();
+        require('../services/whatsappService').validateWhatsAppConfig({ ...(current?.whatsapp?.toObject ? current.whatsapp.toObject() : current?.whatsapp), ...whatsapp }, { requireToken: false });
+      }
       const hasNewSecret = Boolean(
         (typeof smtp?.password === 'string' && smtp.password.trim()) ||
-        (typeof whatsapp?.apiKey === 'string' && whatsapp.apiKey.trim())
+        ['apiKey', 'appSecret', 'webhookVerifyToken'].some(key => typeof whatsapp?.[key] === 'string' && whatsapp[key].trim())
       );
       const cipher = hasNewSecret ? getSecretCipher() : undefined;
-      const update = { ...settingsFields, ...buildProviderSettingsUpdate({ smtp, whatsapp }, cipher) };
+      // Prevent dotted provider fields from bypassing secret encryption.
+      const allowed = ['company', 'theme', 'roles', 'autoBirthdayWish', 'autoAnniversaryWish', 'labels'];
+      const update = { ...Object.fromEntries(Object.entries(settingsFields).filter(([key]) => allowed.includes(key))), ...buildProviderSettingsUpdate({ smtp, whatsapp }, cipher) };
       const settings = await Settings.findOneAndUpdate(
         {},
         { $set: update },

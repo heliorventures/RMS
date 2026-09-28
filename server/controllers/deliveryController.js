@@ -9,11 +9,15 @@ const { loadMapping, renderMapping } = require('../services/whatsappTemplates');
 const { normalizePhone } = require('../services/whatsappConsent');
 const Event = require('../models/Event');
 const { eventAttachments } = require('../utils/invitationAttachments');
+const { syncEventStatus } = require('../services/invitationLifecycle');
 
 const DEFAULT_MAX_RETRIES = Number(process.env.DELIVERY_MAX_RETRIES) || 3;
 const DEFAULT_BATCH = Number(process.env.DELIVERY_BATCH_SIZE) || 25;
 
 async function createDeliveryJob(req, res) {
+  let preparingJob;
+  let publishing = false;
+  let previousCampaign;
   try {
     let attachments = [];
     let eventId = null;
@@ -98,7 +102,8 @@ async function createDeliveryJob(req, res) {
       campaignId: campaignId || null,
       eventId: eventId || null,
       channel,
-      status: isFutureSchedule ? 'scheduled' : 'queued',
+      status: 'preparing',
+      publicationState: 'preparing',
       ...schedule,
       subject: subject || '',
       body: body || '',
@@ -111,20 +116,7 @@ async function createDeliveryJob(req, res) {
       createdBy: createdBy || req.user?.name || req.user?.email || 'Admin'
     });
 
-    // The delivery worker owns every state transition after this initial queueing.
-    // Update the invitation before messages are inserted so a worker can never be
-    // overwritten by a late request handler update.
-    if (eventId) {
-      try {
-        await Event.findByIdAndUpdate(eventId, {
-          status: isFutureSchedule ? 'scheduled' : 'queued',
-          deliveryJobId: job._id
-        }, { new: true, runValidators: true });
-      } catch (error) {
-        await messageStore.deleteJob(job._id);
-        throw error;
-      }
-    }
+    preparingJob = job;
 
     const messageRows = [];
     preparedRecipients.forEach(({ contact, ch, validation, recipient, whatsappTemplate }) => {
@@ -159,26 +151,51 @@ async function createDeliveryJob(req, res) {
       : stats.failed + stats.skipped > 0
         ? (stats.sent + stats.delivered > 0 ? 'partial' : 'failed')
         : 'completed';
-    await messageStore.updateJob(job._id, {
-      stats,
-      status
-    });
+    // Prepare metadata while this job is still invisible to workers.
+    if (eventId) {
+      const event = await Event.findByIdAndUpdate(eventId, { status, deliveryJobId: job._id }, { new: true, runValidators: true });
+      if (!event) throw Object.assign(new Error('Invitation no longer exists.'), { status: 404 });
+    }
 
     if (campaignId) {
-      await messageStore.updateCampaign(campaignId, {
+      previousCampaign = await messageStore.prepareCampaign(campaignId, job._id, {
         status: status === 'queued' ? 'running' : status,
         stats: { total: stats.total, sent: stats.sent + stats.delivered, delivered: stats.delivered, failed: stats.failed }
       });
     }
 
+    // Publication is the last lifecycle write by this request.
+    publishing = true;
+    const published = await messageStore.publishJob(job._id, { stats, status });
+    if (!published) throw new Error('Delivery publication could not be confirmed.');
     logger.info('Delivery job created', { jobId: job._id, total: stats.total, channel });
 
     res.status(201).json({
       success: true,
-      data: { ...job, status, stats },
+      data: { ...job, publicationState: 'published', status, stats },
       message: `Queued ${preparedRecipients.filter(row => row.validation.valid).length} messages for delivery${stats.skipped ? `; ${stats.skipped} skipped (see delivery details)` : ''}`
     });
   } catch (err) {
+    if (preparingJob) {
+      try {
+        // Never abort a job whose publication already committed.
+        const aborted = await messageStore.abortJobPreparation(preparingJob._id, err.message);
+        if (aborted) {
+          await syncEventStatus(preparingJob, 'failed');
+          if (previousCampaign) await messageStore.restoreCampaignPreparation(preparingJob, previousCampaign);
+        }
+        else if (publishing) {
+          const current = await messageStore.getJob(preparingJob._id);
+          if (current?.publicationState === 'published') {
+            return res.status(201).json({ success: true, data: current, message: 'Delivery job accepted.' });
+          }
+        }
+      } catch (recoveryError) {
+        logger.error('Delivery preparation recovery failed', { jobId: preparingJob._id, error: recoveryError.message });
+        if (publishing) return res.status(202).json({ success: false, code: 'PUBLICATION_UNCONFIRMED', data: preparingJob,
+          message: `Publication confirmation is pending for job ${preparingJob._id}. Check Delivery Tracking before sending again.` });
+      }
+    }
     logger.error('Create delivery job failed', { error: err.message });
     res.status(err.status || (err.name === 'CastError' ? 400 : 500)).json({ success: false, message: err.message });
   }
@@ -224,6 +241,9 @@ async function retryFailed(req, res) {
     const job = await messageStore.getJob(req.params.id);
     if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
 
+    if (['preparing', 'aborted'].includes(job.publicationState)) {
+      return res.status(409).json({ success: false, message: 'This job was not published. Its partial recipient list cannot be retried.' });
+    }
     const count = await messageStore.requeueFailedMessages(job._id);
     const stats = await messageStore.recountJobStats(job._id);
     if (count > 0) {
@@ -281,15 +301,6 @@ async function getLogs(req, res) {
     res.json({ success: true, data: entries });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
-  }
-}
-
-async function syncEventStatus(job, status) {
-  if (!job.eventId) return;
-  try {
-    await Event.findByIdAndUpdate(job.eventId, { status, deliveryJobId: job._id }, { new: true, runValidators: true });
-  } catch (error) {
-    logger.error('Invitation delivery status update failed', { eventId: job.eventId, jobId: job._id, error: error.message });
   }
 }
 

@@ -11,6 +11,7 @@ const campaignSchema = new mongoose.Schema({
     filters: mongoose.Schema.Types.Mixed
   },
   content: String,
+  deliveryJobId: { type: mongoose.Schema.Types.ObjectId, ref: 'DeliveryJob' },
   scheduledAt: Date,
   scheduleTimezone: String,
   status: { type: String, enum: ['draft', 'scheduled', 'running', 'completed', 'partial', 'failed'], default: 'draft' },

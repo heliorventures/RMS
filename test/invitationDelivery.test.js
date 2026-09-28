@@ -45,6 +45,7 @@ test('future invitations snapshot their attachment and retain a scheduled delive
   const insert = t.mock.method(store, 'createMessages', async rows => rows);
   t.mock.method(store, 'recountJobStats', async () => ({ total: 1, pending: 1, skipped: 0, failed: 0 }));
   t.mock.method(store, 'updateJob', async () => {});
+  t.mock.method(store, 'publishJob', async (id, data) => ({ _id: id, ...data, publicationState: 'published' }));
   const res = { status(value) { this.code = value; return this; }, json(value) { this.body = value; return this; } };
   await controller.createDeliveryJob({ body: { eventId: 'event-1', subject: 'Invitation', body: 'Please join us' } }, res);
   assert.equal(res.code, 201);
@@ -82,7 +83,7 @@ test('event edits cannot overwrite delivery lifecycle fields', async t => {
   const update = t.mock.method(Event, 'findByIdAndUpdate', async (id, data) => ({ _id: id, ...data }));
   const res = { status(value) { this.code = value; return this; }, json(value) { this.body = value; return this; } };
   await createCrud(Event, 'events').update({ params: { id: '507f1f77bcf86cd799439015' }, body: { title: 'Edited title', status: 'completed', deliveryStats: { email: { sent: 99 } } } }, res);
-  const payload = update.mock.calls[0].arguments[1];
+  const payload = update.mock.calls[0].arguments[1].$set;
   assert.equal(payload.status, undefined);
   assert.equal(payload.deliveryStats, undefined);
   assert.equal(payload.title, 'Edited title');
@@ -93,9 +94,10 @@ test('final job outcome updates its invitation status', async t => {
   t.mock.method(store, 'recountJobStats', async () => ({ total: 1, skipped: 1, pending: 0, retrying: 0, failed: 0, sent: 0, delivered: 0 }));
   t.mock.method(store, 'getJob', async () => ({ _id: 'job-1', eventId: 'event-1', status: 'queued' }));
   t.mock.method(store, 'updateJob', async () => {});
-  const update = t.mock.method(EventModel, 'findByIdAndUpdate', async () => ({}));
+  const update = t.mock.method(EventModel, 'findOneAndUpdate', async () => ({}));
   await require('../server/services/deliveryQueue').finalizeJob('job-1');
-  assert.equal(update.mock.calls[0].arguments[1].status, 'failed');
+  assert.deepEqual(update.mock.calls[0].arguments[0], { _id: 'event-1', deliveryJobId: 'job-1' });
+  assert.equal(update.mock.calls[0].arguments[1].$set.status, 'failed');
 });
 
 test('jobs with only skipped recipients finish failed, not completed', async t => {

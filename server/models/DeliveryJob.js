@@ -8,10 +8,11 @@ const deliveryJobSchema = new mongoose.Schema({
   channel: { type: String, enum: ['email', 'whatsapp', 'sms', 'both'], default: 'email' },
   status: {
     type: String,
-    enum: ['scheduled', 'queued', 'processing', 'completed', 'partial', 'failed', 'cancelled'],
+    enum: ['preparing', 'scheduled', 'queued', 'processing', 'completed', 'partial', 'failed', 'cancelled'],
     default: 'queued'
   },
   subject: String,
+  publicationState: { type: String, enum: ['preparing', 'published', 'aborted'], default: 'published' },
   body: String,
   scheduledAt: Date,
   scheduleTimezone: String,

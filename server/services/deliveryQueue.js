@@ -1,5 +1,5 @@
 const logger = require('../utils/logger');
-const Event = require('../models/Event');
+const { syncEventStatus } = require('./invitationLifecycle');
 const messageStore = require('./messageStore');
 const emailService = require('./emailService');
 const { validateEmail, validatePhone } = require('../utils/validators');
@@ -141,7 +141,7 @@ async function processMessage(message, settings, job) {
 async function finalizeJob(jobId) {
   const stats = await messageStore.recountJobStats(jobId);
   const job = await messageStore.getJob(jobId);
-  if (!job) return;
+  if (!job || ['preparing', 'aborted'].includes(job.publicationState)) return;
 
   let status = job.status;
   if (stats.pending > 0 || stats.retrying > 0) {
@@ -172,7 +172,7 @@ async function finalizeJob(jobId) {
         delivered: stats.delivered,
         failed: stats.failed
       }
-    });
+    }, job._id);
   }
 }
 
@@ -209,15 +209,6 @@ async function processBatch() {
     logger.error('Delivery batch error', { error: err.message, stack: err.stack });
   } finally {
     processing = false;
-  }
-}
-
-async function syncEventStatus(job, status) {
-  if (!job?.eventId) return;
-  try {
-    await Event.findByIdAndUpdate(job.eventId, { status, deliveryJobId: job._id }, { new: true, runValidators: true });
-  } catch (error) {
-    logger.error('Invitation delivery status update failed', { eventId: job.eventId, jobId: job._id, error: error.message });
   }
 }
 

@@ -1,8 +1,14 @@
 const { normalizeSchedule } = require('../time/schedule');
 
 function normalizeInput(body, collection) {
-  const data = { ...body };
+  let data = { ...body };
   if (collection === 'events') {
+    if (Object.keys(data).some(key => key.startsWith('$') || key.includes('.'))) {
+      throw Object.assign(new Error('Event updates must contain plain editable fields.'), { status: 400 });
+    }
+    const editable = new Set(['title', 'description', 'venue', 'date', 'time', 'mapsLink', 'channel', 'audience',
+      'invitationImage', 'invitationPdf', 'recipients', 'scheduledAt', 'scheduleTimezone']);
+    data = Object.fromEntries(Object.entries(data).filter(([key]) => editable.has(key)));
     if (Object.hasOwn(data, 'scheduledAt')) Object.assign(data, normalizeSchedule(data));
     // Job creation and the delivery worker are the only authorities that may
     // change lifecycle state. Event edits must not be able to overwrite it.
@@ -56,7 +62,8 @@ function createCrudController(Model, collection) {
       try {
         const data = normalizeInput(req.body, collection);
         if (req.file) data.image = `/uploads/${req.params.type || 'general'}/${req.file.filename}`;
-        const item = await Model.findByIdAndUpdate(req.params.id, data, { new: true, runValidators: true });
+        const updates = collection === 'events' ? { $set: data } : data;
+        const item = await Model.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
         if (!item) return res.status(404).json({ success: false, message: 'Not found.' });
         res.json({ success: true, data: item });
       } catch (err) {

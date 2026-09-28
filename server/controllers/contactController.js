@@ -1,5 +1,17 @@
 const Contact = require('../models/Contact');
 const contactImport = require('../utils/contactImport');
+const contactData = require('../../public/assets/js/contactData');
+
+function contactInput(body, partial = false) {
+  const allowed = new Set([...Object.keys(contactData.limits), ...Object.keys(contactData.choices),
+    'dob', 'anniversary', 'mobile', 'whatsapp', 'email', 'pincode', 'tags', 'groups', 'photo']);
+  let data;
+  try { data = contactData.normalize(Object.fromEntries(Object.entries(body).filter(([key]) => allowed.has(key)))); }
+  catch (error) { error.status = 400; throw error; }
+  const error = contactData.validate(data, { partial });
+  if (error) throw Object.assign(new Error(error), { status: 400 });
+  return data;
+}
 
 const MAX_PAGE_SIZE = 100;
 
@@ -87,24 +99,27 @@ const contactController = {
 
   async create(req, res) {
     try {
-      const data = { ...req.body };
+      const data = contactInput(req.body);
+      data.timeline = [{ action: 'Created', description: 'Contact profile created', user: req.user?.email || 'User' }];
       if (req.file) data.photo = `/uploads/contacts/${req.file.filename}`;
       const contact = await Contact.create(data);
       res.status(201).json({ success: true, data: contact });
     } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
+      res.status(err.status || (err.name === 'ValidationError' ? 400 : 500)).json({ success: false, message: err.message });
     }
   },
 
   async update(req, res) {
     try {
-      const data = { ...req.body };
+      const data = contactInput(req.body, true);
       if (req.file) data.photo = `/uploads/contacts/${req.file.filename}`;
-      const contact = await Contact.findByIdAndUpdate(req.params.id, data, { new: true });
+      const contact = await Contact.findByIdAndUpdate(req.params.id, {
+        $set: data, $push: { timeline: { action: 'Updated', description: 'Contact profile updated', date: new Date(), user: req.user?.email || 'User' } }
+      }, { new: true, runValidators: true });
       if (!contact) return res.status(404).json({ success: false, message: 'Contact not found.' });
       res.json({ success: true, data: contact });
     } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
+      res.status(err.status || (err.name === 'ValidationError' ? 400 : 500)).json({ success: false, message: err.message });
     }
   },
 
@@ -181,12 +196,20 @@ const contactController = {
         return res.status(400).json({ success: false, message: 'Maximum 2,000 contacts per batch.' });
       }
 
-      const { valid, errors } = contactImport.prepareContacts(rows);
+      const { valid, validRows, errors } = contactImport.prepareContacts(rows);
       if (!valid.length) {
-        return res.status(400).json({ success: false, message: 'No valid contacts found.', errors });
+        return res.status(400).json({ success: false, message: errors.slice(0, 20).map(e => `Row ${e.row}: ${e.message}`).join('; '), errors });
       }
 
-      const inserted = await Contact.insertMany(valid, { ordered: false });
+      // Validate every row before insertion so Mongoose cannot silently discard invalid rows.
+      const candidates = validRows.filter(({ row, contact }) => {
+        const error = new Contact(contact).validateSync();
+        if (!error) return true;
+        errors.push({ row, message: error.message });
+        return false;
+      });
+      if (!candidates.length) return res.status(400).json({ success: false, message: errors.map(e => e.message).join('; '), errors });
+      const inserted = await Contact.insertMany(candidates.map(({ contact }) => contact), { ordered: true });
       res.json({
         success: true,
         data: { inserted: inserted.length, skipped: errors.length, errors: errors.slice(0, 20) }

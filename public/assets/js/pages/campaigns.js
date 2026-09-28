@@ -12,12 +12,12 @@ document.getElementById('pageBody').innerHTML = `
   </tr></thead><tbody></tbody></table></div></div>
   <div class="modal fade" id="campaignModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
     <div class="modal-header gradient"><h5 class="modal-title">Create Campaign</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
-    <div class="modal-body"><form id="campaignForm">
+    <div class="modal-body"><form id="campaignForm"><input type="hidden" id="campaignId">
       <div class="row g-3">
         <div class="col-md-6"><label class="form-label">Campaign Name *</label><input class="form-control" id="campName" required></div>
         <div class="col-md-6"><label class="form-label">Type</label><select class="form-select" id="campType"><option value="birthday">Birthday</option><option value="festival">Festival</option><option value="invitation">Invitation</option><option value="email">Email</option><option value="whatsapp">WhatsApp</option><option value="sms" disabled>SMS</option></select><div class="form-text" id="smsCapabilityReason">SMS provider is not configured</div></div>
         <div class="col-md-6"><label class="form-label">Channel</label><select class="form-select" id="campChannel"><option value="email">Email</option><option value="whatsapp">WhatsApp</option><option value="both">Both</option></select></div>
-        <div class="col-md-6"><label class="form-label">Status</label><select class="form-select" id="campStatus"><option value="draft">Draft</option><option value="scheduled">Scheduled</option></select></div>
+        <div class="col-md-6"><p class="form-text">Save a draft to edit it later. Schedule creates the delivery job.</p></div>
         <div class="col-12"><label class="form-label">Content</label><textarea class="form-control" id="campContent" rows="4" placeholder="Use {{Name}}, {{City}}, {{Sector}} variables"></textarea></div>
         <div class="col-12"><label class="form-label">Schedule</label><input type="datetime-local" class="form-control" id="campSchedule"></div>
       </div>
@@ -58,7 +58,7 @@ async function loadCampaigns() {
       { data: 'stats', render: stats => stats?.sent || 0 },
       { data: 'stats', render: stats => stats?.delivered || 0 },
       { data: 'stats', render: stats => stats?.failed || 0 },
-      { data: null, orderable: false, render: campaign => `<a class="btn btn-sm btn-outline-primary" href="/pages/delivery.html?campaignId=${campaign._id}" aria-label="View delivery report"><i class="bi bi-bar-chart"></i></a> <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteCampaign('${campaign._id}')" aria-label="Delete campaign"><i class="bi bi-trash"></i></button>` }
+      { data: null, orderable: false, render: campaign => `${campaign.status === 'draft' ? `<button type="button" class="btn btn-sm btn-outline-primary" onclick="editCampaign('${campaign._id}')" aria-label="Edit campaign"><i class="bi bi-pencil"></i></button>` : `<a class="btn btn-sm btn-outline-primary" href="/pages/delivery.html?campaignId=${campaign._id}" aria-label="View delivery report"><i class="bi bi-bar-chart"></i></a>`} <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteCampaign('${campaign._id}')" aria-label="Delete campaign"><i class="bi bi-trash"></i></button>` }
     ],
     pageLength: 10
   });
@@ -66,21 +66,49 @@ async function loadCampaigns() {
 
 window.openCampaignModal = () => {
   document.getElementById('campaignForm').reset();
+  document.getElementById('campaignId').value = '';
+  document.querySelector('#campaignModal .modal-title').textContent = 'Create Campaign';
   RMS.mutations.clearFormErrors(document.getElementById('campaignForm'));
 };
 
+window.editCampaign = async id => {
+  const res = await RMS.api.get(`/campaigns/${id}`);
+  if (res.data?.status !== 'draft') return RMS.toast.show('Only draft campaigns can be edited', 'warning');
+  window.openCampaignModal();
+  document.getElementById('campaignId').value = id;
+  document.querySelector('#campaignModal .modal-title').textContent = 'Edit Campaign';
+  for (const [input, field] of [['campName', 'name'], ['campType', 'type'], ['campChannel', 'channel'], ['campContent', 'content']]) document.getElementById(input).value = res.data[field] || '';
+  document.getElementById('campSchedule').value = RMS.datetime.toLocalInput(res.data.scheduledAt);
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('campaignModal')).show();
+};
+
+async function persistCampaign(data) {
+  const id = document.getElementById('campaignId').value;
+  const result = id ? await RMS.api.put(`/campaigns/${id}`, data) : await RMS.api.post('/campaigns', data);
+  document.getElementById('campaignId').value = result.data._id;
+  return result;
+}
+
+if (RMS.utils.queryParams().action === 'create') {
+  window.openCampaignModal();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('campaignModal')).show();
+}
+
 window.saveCampaign = async (button) => {
+  let schedule;
+  try { schedule = RMS.datetime.fromLocalInput(document.getElementById('campSchedule').value); }
+  catch (error) { return RMS.mutations.showValidationError('#campaignForm', error.message, '#campSchedule'); }
   const data = {
     name: document.getElementById('campName').value,
     type: document.getElementById('campType').value,
     channel: document.getElementById('campChannel').value,
     status: 'draft',
     content: document.getElementById('campContent').value,
-    stats: { total: 0, sent: 0, delivered: 0, failed: 0 }
+    ...schedule
   };
   if (!data.name.trim()) return RMS.mutations.showValidationError('#campaignForm', 'Campaign name is required', '#campName');
 
-  const result = await RMS.mutations.runMutation(button, () => RMS.api.post('/campaigns', data), {
+  const result = await RMS.mutations.runMutation(button, () => persistCampaign(data), {
     form: '#campaignForm',
     pending: 'Saving…',
     success: 'Campaign saved as draft'
@@ -92,12 +120,14 @@ window.saveCampaign = async (button) => {
 };
 
 window.scheduleCampaign = async (button) => {
-  const schedule = RMS.datetime.fromLocalInput(document.getElementById('campSchedule').value);
+  let schedule;
+  try { schedule = RMS.datetime.fromLocalInput(document.getElementById('campSchedule').value); }
+  catch (error) { return RMS.mutations.showValidationError('#campaignForm', error.message, '#campSchedule'); }
   const data = {
     name: document.getElementById('campName').value,
     type: document.getElementById('campType').value,
     channel: document.getElementById('campChannel').value,
-    status: 'scheduled',
+    status: 'draft',
     content: document.getElementById('campContent').value,
     ...schedule,
     stats: { total: 0, sent: 0, delivered: 0, failed: 0 }
@@ -107,7 +137,7 @@ window.scheduleCampaign = async (button) => {
   let campaignSaved = false;
   const result = await RMS.mutations.runMutation(button, async () => {
     const selection = await RMS.utils.withWhatsAppTemplate({ channel: data.channel });
-    const campaign = await RMS.api.post('/campaigns', data);
+    const campaign = await persistCampaign(data);
     campaignSaved = true;
     return RMS.api.post('/delivery/jobs', {
       name: data.name,

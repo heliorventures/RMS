@@ -31,6 +31,10 @@ async function createJob(data) {
   return normalizeDoc(job);
 }
 
+async function deleteJob(id) {
+  return DeliveryJob.findByIdAndDelete(id);
+}
+
 async function updateJob(id, updates) {
   return DeliveryJob.findByIdAndUpdate(id, updates, { new: true }).lean();
 }
@@ -145,6 +149,7 @@ module.exports = {
   getAllContacts,
   getAllGroups,
   createJob,
+  deleteJob,
   updateJob,
   getJob,
   listJobs,

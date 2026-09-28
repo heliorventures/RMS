@@ -2,6 +2,7 @@ RMS.components.initLayout('/pages/dashboard.html', 'Dashboard', 'Home / Dashboar
 document.getElementById('pageBody').innerHTML = RMS.components.renderSkeletonCards(8);
 
 (async function init() {
+  try {
   const res = await RMS.requests.run('dashboard:stats', ({ signal }) => RMS.api.get('/dashboard/stats', { signal }));
   if (!res) return;
   const d = res?.data || {};
@@ -31,8 +32,8 @@ document.getElementById('pageBody').innerHTML = RMS.components.renderSkeletonCar
           <div class="card-header gradient"><i class="bi bi-lightning-charge me-2"></i>Quick Actions</div>
           <div class="card-body">
             <div class="row g-2">
-              ${quickAction('/pages/contacts.html', 'bi-person-plus', 'Add Contact')}
-              ${quickAction('/pages/campaigns.html', 'bi-megaphone', 'New Campaign')}
+              ${quickAction('/pages/contacts.html?action=create', 'bi-person-plus', 'Add Contact')}
+              ${quickAction('/pages/campaigns.html?action=create', 'bi-megaphone', 'New Campaign')}
               ${quickAction('/pages/birthdays.html', 'bi-cake2', 'Birthday Wishes')}
               ${quickAction('/pages/invitations.html', 'bi-envelope-paper', 'Send Invite')}
               ${quickAction('/pages/festivals.html', 'bi-stars', 'Festival Msg')}
@@ -76,6 +77,12 @@ document.getElementById('pageBody').innerHTML = RMS.components.renderSkeletonCar
   });
 
   initCharts(d.charts || {});
+  } catch (error) {
+    const body = document.getElementById('pageBody');
+    body.innerHTML = '<div class="alert alert-danger" role="alert"></div><button type="button" class="btn btn-outline-primary" id="retryDashboard">Retry</button>';
+    body.querySelector('[role="alert"]').textContent = error.message || 'Dashboard data could not be loaded.';
+    document.getElementById('retryDashboard').onclick = init;
+  }
 })();
 
 function statCard(color, icon, value, label, change) {

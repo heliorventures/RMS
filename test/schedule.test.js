@@ -33,3 +33,7 @@ test('due-message filter excludes future schedules', () => {
     ]
   });
 });
+
+test('scheduling rejects dates that JavaScript would silently roll into the next month', () => {
+  assert.throws(() => normalizeSchedule({ scheduledAt: '2026-02-31T10:00:00.000Z', scheduleTimezone: 'Asia/Kolkata' }), /valid calendar date/);
+});

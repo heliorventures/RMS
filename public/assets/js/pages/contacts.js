@@ -27,7 +27,7 @@ document.getElementById('pageBody').innerHTML = `
       <div class="col-md-2"><label class="form-label small">Sector</label><select class="form-select form-select-sm" id="filterSector"><option value="">All Sectors</option></select></div>
       <div class="col-md-2"><label class="form-label small">Religion</label><select class="form-select form-select-sm" id="filterReligion"><option value="">All</option></select></div>
       <div class="col-md-2"><label class="form-label small">Status</label><select class="form-select form-select-sm" id="filterStatus"><option value="">All</option><option>Active</option><option>Inactive</option><option>VIP</option></select></div>
-      <div class="col-md-2"><button class="btn btn-outline-primary btn-sm w-100" onclick="applyFilters()"><i class="bi bi-funnel me-1"></i>Apply Filters</button></div>
+      <div class="col-md-2 d-flex gap-1"><button class="btn btn-outline-primary btn-sm" onclick="applyFilters()">Apply</button><button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearContactFilters()">Clear filters</button></div>
       <div class="col-md-2"><button class="btn btn-outline-secondary btn-sm w-100" onclick="exportContacts()"><i class="bi bi-download me-1"></i>Export</button></div>
     </div>
   </div>
@@ -46,6 +46,7 @@ document.getElementById('pageBody').innerHTML = `
           <ol class="small text-secondary mb-3">
             <li>Download the <a href="/assets/templates/contacts-import-template.csv" download>CSV template</a></li>
             <li>Fill in contact details (First Name and Last Name are required)</li>
+            <li>Use YYYY-MM-DD or DD-MM-YYYY dates. In Excel, format phone columns as Text to preserve + and leading digits.</li>
             <li>Upload the CSV file — supports 50,000+ contacts via batch import</li>
           </ol>
           <div class="mb-3">
@@ -110,15 +111,22 @@ document.getElementById('pageBody').innerHTML = `
     </div>
   </div>`;
 
-const CITIES = ['Pune','Mumbai','Delhi','Bangalore','Hyderabad','Ahmedabad'];
-const SECTORS = ['Government','Supplier','Consultant','Builder','Friends','Associates','Flat Holder'];
-const RELIGIONS = ['Hindu','Jain','Muslim','Christian','Sikh'];
+const { city: CITIES, sector: SECTORS, religion: RELIGIONS } = RMS.contactData.choices;
 const BATCH_SIZE = 1000;
 let table;
 let totalContacts = 0;
 let activeFilters = { city: '', sector: '', religion: '', status: '' };
 let requestedEditOpened = false;
 const contactUrl = RMS.urlState;
+for (const [field, limit] of Object.entries(RMS.contactData.limits)) {
+  const input = document.getElementById(field); if (input) input.maxLength = limit;
+}
+for (const field of ['dob', 'anniversary']) {
+  const input = document.getElementById(field); input.min = '1900-01-01'; input.max = new Date().toLocaleDateString('en-CA');
+}
+if (RMS.utils.queryParams().action === 'create') {
+  queueMicrotask(() => { window.openContactModal(); bootstrap.Modal.getOrCreateInstance(document.getElementById('contactModal')).show(); });
+}
 
 ['city','filterCity'].forEach(id => { const el = document.getElementById(id); if (el) CITIES.forEach(c => { el.innerHTML += `<option>${c}</option>`; }); });
 ['sector','filterSector'].forEach(id => { const el = document.getElementById(id); if (el) SECTORS.forEach(s => { el.innerHTML += `<option>${s}</option>`; }); });
@@ -240,11 +248,14 @@ window.editContact = async (id) => {
   document.getElementById('contactModalTitle').textContent = 'Edit Contact';
   ['firstName','lastName','gender','mobile','whatsapp','email','religion','sector','occupation','company','designation','city','state','pincode','address','status','notes'].forEach(f => {
     const el = document.getElementById(f);
-    if (el) el.value = c[f] || '';
+    if (el) {
+      if (el.tagName === 'SELECT' && c[f] && ![...el.options].some(option => option.value === c[f])) el.add(new Option(c[f], c[f]));
+      el.value = c[f] || '';
+    }
   });
-  if (c.dob) document.getElementById('dob').value = c.dob.split('T')[0];
-  if (c.anniversary) document.getElementById('anniversary').value = c.anniversary.split('T')[0];
-  if (c.tags) document.getElementById('tags').value = c.tags.join(', ');
+  document.getElementById('dob').value = c.dob ? c.dob.split('T')[0] : '';
+  document.getElementById('anniversary').value = c.anniversary ? c.anniversary.split('T')[0] : '';
+  document.getElementById('tags').value = (c.tags || []).join(', ');
   new bootstrap.Modal(document.getElementById('contactModal')).show();
 };
 
@@ -260,6 +271,12 @@ window.saveContact = async (button) => {
     const field = !data.firstName?.trim() ? '#firstName' : '#lastName';
     return RMS.mutations.showValidationError('#contactForm', 'First and last name are required', field);
   }
+  if (!document.getElementById('contactForm').reportValidity()) return;
+  try {
+    Object.assign(data, RMS.contactData.normalize(data));
+    const error = RMS.contactData.validate(data);
+    if (error) return RMS.mutations.showValidationError('#contactForm', error);
+  } catch (error) { return RMS.mutations.showValidationError('#contactForm', error.message); }
   const result = await RMS.mutations.runMutation(button, () => id
     ? RMS.api.put(`/contacts/${id}`, data)
     : RMS.api.post('/contacts', data), {
@@ -292,6 +309,12 @@ window.applyFilters = () => {
   };
   contactUrl.set({ ...activeFilters, [contactUrl.keys.page]: null });
   reloadTable();
+};
+
+window.clearContactFilters = () => {
+  for (const key of Object.keys(activeFilters)) { activeFilters[key] = ''; document.getElementById(`filter${key[0].toUpperCase()}${key.slice(1)}`).value = ''; }
+  contactUrl.set({ ...activeFilters, [contactUrl.keys.search]: null, [contactUrl.keys.page]: null });
+  table.search('').page(0).draw();
 };
 
 contactUrl.onPopState(() => {
@@ -328,40 +351,54 @@ window.startBulkUpload = async (button) => {
 
   const progressWrap = document.getElementById('bulkUploadProgress');
   const resultEl = document.getElementById('bulkUploadResult');
+  document.getElementById('bulkUploadBar').style.width = '0%';
+  document.getElementById('bulkUploadPercent').textContent = '0%';
+  document.getElementById('bulkUploadDetail').textContent = '';
+  document.getElementById('bulkUploadStatus').textContent = 'Reading file...';
+  document.getElementById('bulkUploadProgressBar').setAttribute('aria-valuenow', '0');
   progressWrap.classList.remove('d-none');
   resultEl.classList.add('d-none');
   const result = await RMS.mutations.runMutation(button, async () => {
     const text = await file.text();
-    const rows = RMS.utils.parseCSV(text).map(RMS.utils.normalizeContactRow).filter(r => r.firstName && r.lastName);
+    const rows = RMS.utils.parseCSV(text);
     if (!rows.length) {
       throw new Error('No valid contacts found in file');
     }
 
     let imported = 0;
     let skipped = 0;
+    const errors = [];
     const total = rows.length;
     const batches = Math.ceil(total / BATCH_SIZE);
 
     for (let i = 0; i < batches; i++) {
       const batch = rows.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);
       const pct = Math.round(((i + 1) / batches) * 100);
-      document.getElementById('bulkUploadBar').style.width = `${pct}%`;
-      document.getElementById('bulkUploadProgressBar').setAttribute('aria-valuenow', String(pct));
-      document.getElementById('bulkUploadPercent').textContent = `${pct}%`;
       document.getElementById('bulkUploadStatus').textContent = `Importing batch ${i + 1} of ${batches}...`;
       document.getElementById('bulkUploadDetail').textContent = `${imported.toLocaleString()} of ${total.toLocaleString()} contacts processed`;
 
-      const res = await RMS.api.post('/contacts/bulk-import', { contacts: batch });
-      imported += res.data?.inserted || batch.length;
+      let res;
+      try { res = await RMS.api.post('/contacts/bulk-import', { contacts: batch }); }
+      catch (error) { throw new Error(`${imported} contacts imported before this batch failed. ${error.message}`); }
+      imported += res.data?.inserted ?? 0;
       skipped += res.data?.skipped || 0;
+      if (res.data?.errors?.length) {
+        errors.push(...res.data.errors.map(e => Number.isInteger(e.row)
+          ? `Row ${e.row + i * BATCH_SIZE}: ${e.message}`
+          : `Validation error: ${e.message}`));
+      }
+      document.getElementById('bulkUploadBar').style.width = `${pct}%`;
+      document.getElementById('bulkUploadProgressBar').setAttribute('aria-valuenow', String(pct));
+      document.getElementById('bulkUploadPercent').textContent = `${pct}%`;
     }
-    return { imported, skipped };
+    if (!imported) throw new Error(errors.join('; ') || 'No contacts were imported');
+    return { imported, skipped, errors };
   }, {
     form: '#bulkUploadForm',
     statusTarget: '#bulkUploadResult',
     errorTarget: '#bulkUploadResult',
     pending: 'Uploading…',
-    success: ({ imported, skipped }) => `Successfully imported ${imported.toLocaleString()} contacts${skipped ? ` (${skipped} skipped)` : ''}.`
+    success: ({ imported, skipped, errors }) => `Imported ${imported.toLocaleString()} contacts${skipped ? `; ${skipped} rejected` : ''}.${errors.length ? ' ' + errors.slice(0, 20).join('; ') : ''}`
   });
 
   if (result.ok) {
@@ -371,10 +408,17 @@ window.startBulkUpload = async (button) => {
     document.getElementById('bulkUploadDetail').textContent = `${imported.toLocaleString()} contacts imported successfully`;
     fileInput.value = '';
     await reloadTable();
+  } else {
+    progressWrap.classList.add('d-none');
+    document.getElementById('bulkUploadDetail').textContent = '';
   }
 };
 
 document.getElementById('bulkUploadModal')?.addEventListener('hidden.bs.modal', () => {
+  document.getElementById('bulkCsvFile').value = '';
+  RMS.mutations.clearFormErrors(document.getElementById('bulkUploadForm'));
+  document.getElementById('bulkUploadDetail').textContent = '';
+  document.getElementById('bulkUploadPercent').textContent = '0%';
   document.getElementById('bulkUploadProgress')?.classList.add('d-none');
   document.getElementById('bulkUploadResult')?.classList.add('d-none');
   document.getElementById('bulkUploadBar').style.width = '0%';

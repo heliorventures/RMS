@@ -1,4 +1,5 @@
 const { v4: uuidv4 } = require('uuid');
+const contactData = require('../../public/assets/js/contactData');
 
 const CSV_HEADERS = [
   'First Name', 'Last Name', 'Gender', 'Date of Birth', 'Anniversary',
@@ -35,39 +36,15 @@ const FIELD_MAP = {
   'notes': 'notes'
 };
 
-function parseCSVLine(line) {
-  const result = [];
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line.charAt(i);
-    if (ch === '"') {
-      if (inQuotes && line.charAt(i + 1) === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (ch === ',' && !inQuotes) {
-      result.push(current.trim());
-      current = '';
-    } else {
-      current += ch;
-    }
-  }
-  result.push(current.trim());
-  return result;
-}
-
 function parseCSV(text) {
-  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(l => l.trim());
+  const lines = contactData.csvRecords(text);
   if (!lines.length) return [];
 
-  const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().trim());
+  const headers = lines[0].map(h => h.toLowerCase().trim());
   const rows = [];
 
   for (let i = 1; i < lines.length; i++) {
-    const values = parseCSVLine(lines[i]);
+    const values = lines[i];
     if (values.every(v => !v)) continue;
     const row = {};
     headers.forEach((header, idx) => {
@@ -79,23 +56,17 @@ function parseCSV(text) {
   return rows;
 }
 
-function parseDate(value) {
-  if (!value || !String(value).trim()) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
-}
-
 function normalizeRow(row) {
   const tags = row.tags
-    ? String(row.tags).split(',').map(t => t.trim()).filter(Boolean)
+    ? (Array.isArray(row.tags) ? row.tags : String(row.tags).split(',')).map(t => String(t).trim()).filter(Boolean)
     : [];
 
-  return {
+  return contactData.normalize({
     firstName: String(row.firstName || row.firstname || '').trim(),
     lastName: String(row.lastName || row.lastname || '').trim(),
     gender: row.gender || 'Male',
-    dob: parseDate(row.dob),
-    anniversary: parseDate(row.anniversary),
+    dob: row.dob,
+    anniversary: row.anniversary,
     mobile: row.mobile || null,
     whatsapp: row.whatsapp || null,
     email: row.email || null,
@@ -120,31 +91,29 @@ function normalizeRow(row) {
       date: new Date().toISOString(),
       user: 'Admin User'
     }]
-  };
+  });
 }
 
 function validateContact(contact) {
-  if (!contact.firstName) return 'First name is required';
-  if (!contact.lastName) return 'Last name is required';
-  if (contact.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email)) {
-    return 'Invalid email address';
-  }
-  return null;
+  return contactData.validate(contact);
 }
 
 function prepareContacts(rows) {
   const valid = [];
+  const validRows = [];
   const errors = [];
   rows.forEach((row, index) => {
-    const normalized = normalizeRow(row);
-    const error = validateContact(normalized);
-    if (error) {
-      errors.push({ row: index + 2, message: error });
-    } else {
-      valid.push(normalized);
-    }
+    try {
+      const normalized = normalizeRow(row);
+      const error = validateContact(normalized);
+      if (error) errors.push({ row: index + 2, message: error });
+      else {
+        valid.push(normalized);
+        validRows.push({ row: index + 2, contact: normalized });
+      }
+    } catch (error) { errors.push({ row: index + 2, message: error.message }); }
   });
-  return { valid, errors };
+  return { valid, validRows, errors };
 }
 
 module.exports = {

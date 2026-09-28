@@ -23,6 +23,8 @@ function normalizeSchedule({ scheduledAt, scheduleTimezone } = {}) {
   }
   const instant = new Date(scheduledAt);
   if (Number.isNaN(instant.getTime())) throw new ScheduleValidationError('scheduledAt must be a valid ISO UTC instant.');
+  const canonicalInput = scheduledAt.length === 20 ? scheduledAt.slice(0, -1) + '.000Z' : scheduledAt;
+  if (instant.toISOString() !== canonicalInput) throw new ScheduleValidationError('scheduledAt must be a valid calendar date.');
   if (!isIanaTimezone(scheduleTimezone)) throw new ScheduleValidationError('scheduleTimezone must be a valid IANA timezone.');
   return { scheduledAt: instant, scheduleTimezone };
 }

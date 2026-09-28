@@ -48,11 +48,11 @@
   word-break: break-word;
 }
 
-.print-label.layout-stacked .label-to { flex: 1; min-height: 0; }
+.print-label.layout-stacked .label-to { flex: 0 0 auto; }
 .print-label.layout-stacked .label-from {
   border-top: 1px solid #cbd5e1;
   padding-top: 4mm;
-  margin-top: auto;
+  margin-top: 4mm;
   flex-shrink: 0;
 }
 

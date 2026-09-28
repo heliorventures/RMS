@@ -70,7 +70,7 @@ window.RMS.components = {
       <div class="header-actions">
         <button type="button" class="header-btn" onclick="RMS.components.toggleTheme()" title="Toggle theme" aria-label="Toggle theme"><i class="bi bi-moon-stars" aria-hidden="true"></i></button>
         <div class="dropdown">
-          <button type="button" class="header-btn" id="notificationsMenuButton" data-bs-toggle="dropdown" aria-label="Notifications" aria-expanded="false" aria-controls="notifDropdown"><i class="bi bi-bell" aria-hidden="true"></i><span class="notif-badge" id="notifCount" aria-hidden="true">3</span></button>
+          <button type="button" class="header-btn" id="notificationsMenuButton" data-bs-toggle="dropdown" aria-label="Notifications" aria-expanded="false" aria-controls="notifDropdown"><i class="bi bi-bell" aria-hidden="true"></i><span class="notif-badge" id="notifCount" aria-hidden="true" style="display:none"></span></button>
           <div class="dropdown-menu dropdown-menu-end notif-dropdown p-0" id="notifDropdown" aria-labelledby="notificationsMenuButton">
             <div class="p-3 border-bottom fw-semibold">Notifications</div>
             <div id="notifList"></div>

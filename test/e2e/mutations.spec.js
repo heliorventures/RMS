@@ -94,7 +94,6 @@ test('dashboard keeps a loading skeleton visible while data is pending', async (
 });
 
 test('dashboard renders an actionable error state when loading fails', async ({ rms }) => {
-  test.fail(true, 'Known missing error-state defect scheduled for Frontend Tasks 2 and 3');
   rms.api.fail('GET', '/api/dashboard/stats', 500, 'Dashboard unavailable');
   await rms.page.goto('/pages/dashboard.html');
   await expect(rms.page.getByRole('alert')).toContainText('Dashboard unavailable');

@@ -1,3 +1,18 @@
+const { normalizeSchedule } = require('../time/schedule');
+
+function normalizeInput(body, collection) {
+  const data = { ...body };
+  if (collection === 'events') {
+    if (Object.hasOwn(data, 'scheduledAt')) Object.assign(data, normalizeSchedule(data));
+    // Job creation and the delivery worker are the only authorities that may
+    // change lifecycle state. Event edits must not be able to overwrite it.
+    delete data.status;
+    delete data.deliveryJobId;
+    delete data.deliveryStats;
+  }
+  return data;
+}
+
 function createCrudController(Model, collection) {
   return {
     async getAll(req, res) {
@@ -28,24 +43,24 @@ function createCrudController(Model, collection) {
 
     async create(req, res) {
       try {
-        const data = { ...req.body };
+        const data = normalizeInput(req.body, collection);
         if (req.file) data[req.file.fieldname === 'file' ? 'image' : req.file.fieldname] = `/uploads/${req.params.type || 'general'}/${req.file.filename}`;
         const item = await Model.create(data);
         res.status(201).json({ success: true, data: item });
       } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        res.status(err.status || (['ValidationError', 'CastError'].includes(err.name) ? 400 : 500)).json({ success: false, message: err.message });
       }
     },
 
     async update(req, res) {
       try {
-        const data = { ...req.body };
+        const data = normalizeInput(req.body, collection);
         if (req.file) data.image = `/uploads/${req.params.type || 'general'}/${req.file.filename}`;
-        const item = await Model.findByIdAndUpdate(req.params.id, data, { new: true });
+        const item = await Model.findByIdAndUpdate(req.params.id, data, { new: true, runValidators: true });
         if (!item) return res.status(404).json({ success: false, message: 'Not found.' });
         res.json({ success: true, data: item });
       } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        res.status(err.status || (['ValidationError', 'CastError'].includes(err.name) ? 400 : 500)).json({ success: false, message: err.message });
       }
     },
 

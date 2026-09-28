@@ -7,7 +7,7 @@ let pollInFlight = false;
 const deliveryUrl = RMS.urlState;
 
 document.getElementById('pageActions').innerHTML = `
-  <button class="btn btn-outline-secondary" onclick="loadJobs()"><i class="bi bi-arrow-clockwise me-1"></i> Refresh</button>`;
+  <button class="btn btn-outline-secondary" onclick="refreshDelivery(this)"><i class="bi bi-arrow-clockwise me-1"></i> Refresh</button>`;
 
 document.getElementById('pageBody').innerHTML = `
   <div class="alert alert-light border mb-4">
@@ -82,6 +82,13 @@ messagePage = deliveryUrl.number(deliveryUrl.keys.page);
 document.getElementById('statusFilter').value = deliveryUrl.read(deliveryUrl.keys.status);
 loadJobs();
 
+window.refreshDelivery = async button => {
+  await RMS.mutations.runMutation(button, async () => {
+    await loadJobs();
+    if (activeJobId) await Promise.all([refreshJobDetail(activeJobId), loadJobMessages()]);
+  }, { pending: 'Refreshing...', success: 'Delivery tracking refreshed' });
+};
+
 async function loadJobs() {
   const params = new URLSearchParams({ limit: 30 });
   const campaignId = RMS.utils.queryParams().campaignId;
@@ -113,7 +120,7 @@ async function loadJobs() {
         <div class="progress mt-2" style="height:4px" role="progressbar" aria-label="Delivery progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}">
           <div class="progress-bar ${activeJobId === j._id ? 'bg-light' : 'bg-primary'}" style="width:${pct}%"></div>
         </div>
-        <small class="${activeJobId === j._id ? 'delivery-job-meta' : 'text-secondary'}">${s.delivered || 0} delivered · ${s.failed || 0} failed · ${s.pending || 0} pending</small>
+        <small class="${activeJobId === j._id ? 'delivery-job-meta' : 'text-secondary'}">${s.sent || 0} sent · ${s.delivered || 0} delivered · ${s.failed || 0} failed · ${s.skipped || 0} skipped · ${s.pending || 0} pending</small>
       </button>`;
   }).join('');
 

@@ -44,7 +44,8 @@ window.RMS.utils = {
       failed: 'badge-inactive', skipped: 'badge-draft', processing: 'badge-scheduled',
       queued: 'badge-scheduled', partial: 'badge-vip', running: 'badge-scheduled'
     };
-    return `<span class="badge-status ${map[status] || 'badge-draft'}">${status || 'Unknown'}</span>`;
+    const label = String(status || 'Unknown').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    return `<span class="badge-status ${map[status] || 'badge-draft'}">${label}</span>`;
   },
 
   formatScheduleConfirmation(message, scheduledAt, scheduleTimezone) {
@@ -62,9 +63,9 @@ window.RMS.utils = {
         errorTarget: options.errorTarget,
         pending: options.pendingMessage || 'Queueing…',
         success: (res) => {
-          const total = res.data?.stats?.total;
+          const total = res.data?.stats?.pending;
           const message = options.successMessage
-            || (typeof total === 'number'
+            || res.message || (typeof total === 'number'
               ? `Queued ${total.toLocaleString()} message${total === 1 ? '' : 's'} for delivery`
               : (res.message || 'Messages queued'));
           return window.RMS.utils.formatScheduleConfirmation(
@@ -208,12 +209,14 @@ window.RMS.utils = {
       'status': 'status', 'notes': 'notes'
     };
 
-    const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(l => l.trim());
+    const lines = window.RMS.contactData
+      ? window.RMS.contactData.csvRecords(text)
+      : text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(l => l.trim()).map(parseLine);
     if (!lines.length) return [];
-    const headers = parseLine(lines[0]).map(h => h.toLowerCase().trim());
+    const headers = lines[0].map(h => h.toLowerCase().trim());
     const rows = [];
     for (let i = 1; i < lines.length; i++) {
-      const values = parseLine(lines[i]);
+      const values = lines[i];
       if (values.every(v => !v)) continue;
       const row = {};
       headers.forEach((header, idx) => {
@@ -223,37 +226,6 @@ window.RMS.utils = {
       rows.push(row);
     }
     return rows;
-  },
-
-  normalizeContactRow(row) {
-    const parseDate = (value) => {
-      if (!value || !String(value).trim()) return null;
-      const d = new Date(value);
-      return Number.isNaN(d.getTime()) ? null : d.toISOString();
-    };
-    return {
-      firstName: String(row.firstName || '').trim(),
-      lastName: String(row.lastName || '').trim(),
-      gender: row.gender || 'Male',
-      dob: parseDate(row.dob),
-      anniversary: parseDate(row.anniversary),
-      mobile: row.mobile || null,
-      whatsapp: row.whatsapp || null,
-      email: row.email || null,
-      religion: row.religion || null,
-      sector: row.sector || null,
-      occupation: row.occupation || null,
-      company: row.company || null,
-      designation: row.designation || null,
-      city: row.city || null,
-      state: row.state || null,
-      country: 'India',
-      pincode: row.pincode || null,
-      address: row.address || null,
-      tags: row.tags ? String(row.tags).split(',').map(t => t.trim()).filter(Boolean) : [],
-      status: row.status || 'Active',
-      notes: row.notes || null
-    };
   }
 };
 
@@ -274,7 +246,8 @@ window.RMS.toast = {
     toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
     toast.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
     toast.setAttribute('aria-atomic', 'true');
-    toast.innerHTML = `<i class="bi bi-${icons[type] || icons.info}" aria-hidden="true" style="color:${colors[type] || colors.info};font-size:1.25rem"></i><span>${message}</span>`;
+    toast.innerHTML = `<i class="bi bi-${icons[type] || icons.info}" aria-hidden="true" style="color:${colors[type] || colors.info};font-size:1.25rem"></i><span></span>`;
+    toast.querySelector('span').textContent = message;
     container.appendChild(toast);
     setTimeout(() => {
       toast.style.opacity = '0';

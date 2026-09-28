@@ -8,8 +8,10 @@ window.RMS.datetime = {
   fromLocalInput(value) {
     const scheduleTimezone = this.browserTimezone();
     if (!value) return { scheduledAt: null, scheduleTimezone };
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(value) || Number(value.slice(0, 4)) < 1900) throw new Error('Enter a valid schedule date and time with a four-digit year.');
     const instant = new Date(value);
     if (Number.isNaN(instant.getTime())) throw new Error('Enter a valid schedule date and time.');
+    if (this.toLocalInput(instant) !== value.slice(0, 16)) throw new Error('This local date and time does not exist. Choose another time.');
     return { scheduledAt: instant.toISOString(), scheduleTimezone };
   },
 

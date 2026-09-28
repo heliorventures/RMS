@@ -76,7 +76,7 @@ async function init() {
   const templates = (tmplRes?.data || []).filter(t => t.type === 'birthday');
   birthdayTemplates = templates;
   document.getElementById('templateGrid').innerHTML = templates.map(t => `<div class="col-md-6"><div class="card"><div class="card-header">${t.name} ${t.isDefault?'<span class="badge bg-primary">Default</span>':''}</div><div class="card-body"><pre class="small bg-light p-3 rounded">${t.body}</pre><div class="mt-2">${(t.variables||[]).map(v=>`<span class="var-chip">{{${v}}}</span>`).join('')}</div></div></div></div>`).join('');
-  document.getElementById('wishTemplate').innerHTML = templates.map(t => `<option value="${t._id}">${t.name}</option>`).join('');
+  document.getElementById('wishTemplate').innerHTML = templates.map(t => `<option value="${t._id}">${t.name}</option>`).join('') || '<option value="">Default birthday greeting (no saved template)</option>';
 
   document.querySelector('[data-bs-target="#calendar"]')?.addEventListener('shown.bs.tab', loadCalendar);
   document.querySelectorAll('[data-bs-toggle="tab"]').forEach((button) => button.addEventListener('shown.bs.tab', () => {

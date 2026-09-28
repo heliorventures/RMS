@@ -40,13 +40,12 @@ window.RMS.api = {
     }
 
     try {
+      const headers = { ...window.RMS.auth.headers(), ...(optionHeaders || {}) };
+      if (fetchOptions.body instanceof FormData) delete headers['Content-Type'];
       const response = await fetch(`${this.baseUrl}/api${endpoint}`, {
         ...fetchOptions,
         signal: controller.signal,
-        headers: {
-          ...window.RMS.auth.headers(),
-          ...(optionHeaders || {})
-        }
+        headers
       });
       const requestId = response.headers.get('x-request-id');
       const responseText = await response.text();

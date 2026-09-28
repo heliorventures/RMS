@@ -7,12 +7,27 @@ const { normalizeSchedule } = require('../time/schedule');
 const { getProviderCapabilities } = require('../services/providerCapabilities');
 const { loadMapping, renderMapping } = require('../services/whatsappTemplates');
 const { normalizePhone } = require('../services/whatsappConsent');
+const Event = require('../models/Event');
+const { eventAttachments } = require('../utils/invitationAttachments');
 
 const DEFAULT_MAX_RETRIES = Number(process.env.DELIVERY_MAX_RETRIES) || 3;
 const DEFAULT_BATCH = Number(process.env.DELIVERY_BATCH_SIZE) || 25;
 
 async function createDeliveryJob(req, res) {
   try {
+    let attachments = [];
+    let eventId = null;
+    if (req.body.eventId) {
+      const event = await Event.findById(req.body.eventId).lean();
+      if (!event) return res.status(404).json({ success: false, message: 'Invitation not found.' });
+      eventId = event._id;
+      attachments = await eventAttachments(event);
+      req.body = { ...req.body, channel: event.channel || 'email',
+        contactIds: event.recipients?.contacts || [], groupIds: event.recipients?.groups || [],
+        filters: { cities: event.recipients?.cities || [], sectors: event.recipients?.sectors || [] },
+        audience: event.audience || 'selected', scheduledAt: event.scheduledAt?.toISOString() || null,
+        scheduleTimezone: event.scheduleTimezone, campaignId: null };
+    }
     const {
       name,
       type = 'bulk',
@@ -55,7 +70,7 @@ async function createDeliveryJob(req, res) {
     if (!finalRecipients.length && filters && Object.values(filters).some(v => Array.isArray(v) && v.length)) {
       finalRecipients = filterContacts(allContacts, filters);
     }
-    if (!finalRecipients.length && (req.body.audience === 'all' || campaignId)) {
+    if (req.body.audience === 'all') {
       finalRecipients = allContacts.filter(c => c.status !== 'Inactive');
     }
     if (!finalRecipients.length) {
@@ -63,10 +78,25 @@ async function createDeliveryJob(req, res) {
     }
 
     const channels = channelsForJob(channel);
+    const preparedRecipients = finalRecipients.flatMap(contact => channels.map(ch => {
+      let validation = validateRecipient(ch, contact);
+      let recipient = ch === 'email' ? contact.email : (contact.whatsapp || contact.mobile);
+      let whatsappTemplate;
+      if (ch === 'whatsapp') {
+        try { recipient = normalizePhone(recipient); whatsappTemplate = renderMapping(whatsappMapping, contact); }
+        catch (error) { validation = { valid: false, reason: error.message }; }
+      }
+      return { contact, ch, validation, recipient, whatsappTemplate };
+    }));
+    if (!preparedRecipients.some(row => row.validation.valid)) {
+      const reasons = [...new Set(preparedRecipients.map(row => row.validation.reason).filter(Boolean))];
+      return res.status(400).json({ success: false, message: `No recipients can receive this ${channel} delivery. ${reasons.join('; ')}` });
+    }
     const job = await messageStore.createJob({
       name: name || `Delivery ${new Date().toISOString()}`,
-      type,
+      type: eventId ? 'event' : type,
       campaignId: campaignId || null,
+      eventId: eventId || null,
       channel,
       status: isFutureSchedule ? 'scheduled' : 'queued',
       ...schedule,
@@ -81,16 +111,23 @@ async function createDeliveryJob(req, res) {
       createdBy: createdBy || req.user?.name || req.user?.email || 'Admin'
     });
 
+    // The delivery worker owns every state transition after this initial queueing.
+    // Update the invitation before messages are inserted so a worker can never be
+    // overwritten by a late request handler update.
+    if (eventId) {
+      try {
+        await Event.findByIdAndUpdate(eventId, {
+          status: isFutureSchedule ? 'scheduled' : 'queued',
+          deliveryJobId: job._id
+        }, { new: true, runValidators: true });
+      } catch (error) {
+        await messageStore.deleteJob(job._id);
+        throw error;
+      }
+    }
+
     const messageRows = [];
-    finalRecipients.forEach(contact => {
-      channels.forEach(ch => {
-        let validation = validateRecipient(ch, contact);
-        let recipient = ch === 'email' ? contact.email : (contact.whatsapp || contact.mobile);
-        let whatsappTemplate;
-        if (ch === 'whatsapp') {
-          try { recipient = normalizePhone(recipient); whatsappTemplate = renderMapping(whatsappMapping, contact); }
-          catch (error) { validation = { valid: false, reason: error.message }; }
-        }
+    preparedRecipients.forEach(({ contact, ch, validation, recipient, whatsappTemplate }) => {
         messageRows.push({
           jobId: job._id,
           contactId: contact._id,
@@ -101,6 +138,7 @@ async function createDeliveryJob(req, res) {
           ...(whatsappTemplate ? { whatsappTemplate } : {}),
           subject: applyTemplate(subject || '', contact),
           body: applyTemplate(body || '', contact),
+          attachments: ch === 'email' ? attachments : [],
           status: validation.valid ? (isFutureSchedule ? 'scheduled' : 'pending') : 'skipped',
           ...schedule,
           failureReason: validation.valid ? null : validation.reason,
@@ -109,7 +147,6 @@ async function createDeliveryJob(req, res) {
           maxRetries: job.config.maxRetries,
           attempts: validation.valid ? [] : [{ at: new Date(), status: 'skipped', error: validation.reason }]
         });
-      });
     });
 
     const INSERT_CHUNK = Number(process.env.DELIVERY_INSERT_CHUNK) || 1000;
@@ -117,25 +154,33 @@ async function createDeliveryJob(req, res) {
       await messageStore.createMessages(messageRows.slice(i, i + INSERT_CHUNK));
     }
     const stats = await messageStore.recountJobStats(job._id);
+    const status = stats.pending > 0
+      ? (isFutureSchedule ? 'scheduled' : 'queued')
+      : stats.failed + stats.skipped > 0
+        ? (stats.sent + stats.delivered > 0 ? 'partial' : 'failed')
+        : 'completed';
     await messageStore.updateJob(job._id, {
       stats,
-      status: stats.pending > 0 ? (isFutureSchedule ? 'scheduled' : 'queued') : 'completed'
+      status
     });
 
     if (campaignId) {
-      await messageStore.updateCampaign(campaignId, { status: 'running', stats: { total: stats.total, sent: 0, delivered: 0, failed: stats.failed } });
+      await messageStore.updateCampaign(campaignId, {
+        status: status === 'queued' ? 'running' : status,
+        stats: { total: stats.total, sent: stats.sent + stats.delivered, delivered: stats.delivered, failed: stats.failed }
+      });
     }
 
     logger.info('Delivery job created', { jobId: job._id, total: stats.total, channel });
 
     res.status(201).json({
       success: true,
-      data: { ...job, stats },
-      message: `Queued ${stats.total} messages for delivery`
+      data: { ...job, status, stats },
+      message: `Queued ${preparedRecipients.filter(row => row.validation.valid).length} messages for delivery${stats.skipped ? `; ${stats.skipped} skipped (see delivery details)` : ''}`
     });
   } catch (err) {
     logger.error('Create delivery job failed', { error: err.message });
-    res.status(err.status || 500).json({ success: false, message: err.message });
+    res.status(err.status || (err.name === 'CastError' ? 400 : 500)).json({ success: false, message: err.message });
   }
 }
 
@@ -181,7 +226,10 @@ async function retryFailed(req, res) {
 
     const count = await messageStore.requeueFailedMessages(job._id);
     const stats = await messageStore.recountJobStats(job._id);
-    if (count > 0) await messageStore.updateJob(job._id, { status: 'queued', stats, completedAt: null });
+    if (count > 0) {
+      await messageStore.updateJob(job._id, { status: 'queued', stats, completedAt: null });
+      await syncEventStatus(job, 'queued');
+    }
     else await require('../services/deliveryQueue').finalizeJob(job._id);
 
     logger.info('Failed messages requeued', { jobId: job._id, count });
@@ -233,6 +281,15 @@ async function getLogs(req, res) {
     res.json({ success: true, data: entries });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
+  }
+}
+
+async function syncEventStatus(job, status) {
+  if (!job.eventId) return;
+  try {
+    await Event.findByIdAndUpdate(job.eventId, { status, deliveryJobId: job._id }, { new: true, runValidators: true });
+  } catch (error) {
+    logger.error('Invitation delivery status update failed', { eventId: job.eventId, jobId: job._id, error: error.message });
   }
 }
 

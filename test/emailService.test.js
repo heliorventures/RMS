@@ -6,6 +6,24 @@ const {
   buildCacheKey
 } = require('../server/services/emailService');
 
+test('email delivery includes the saved invitation attachment bytes', async t => {
+  const nodemailer = require('nodemailer');
+  const fs = require('fs/promises');
+  const service = require('../server/services/emailService');
+  const original = process.env.DELIVERY_DRY_RUN;
+  process.env.DELIVERY_DRY_RUN = 'false';
+  service.resetTransporter();
+  t.after(() => { service.resetTransporter(); if (original === undefined) delete process.env.DELIVERY_DRY_RUN; else process.env.DELIVERY_DRY_RUN = original; });
+  let sent;
+  t.mock.method(nodemailer, 'createTransport', () => ({ sendMail: async message => { sent = message; return { messageId: 'test-message' }; }, close() {} }));
+  t.mock.method(fs, 'readFile', async file => { assert.match(file, /uploads[\\/]invitations[\\/]invite.pdf$/); return Buffer.from('%PDF-test'); });
+  const result = await service.sendEmail({ smtp: { host: 'smtp.example.com', user: 'test@example.com' }, to: 'recipient@example.com', body: '<hello>', attachments: ['/uploads/invitations/invite.pdf'] });
+  assert.equal(result.success, true);
+  assert.equal(sent.attachments[0].filename, 'invite.pdf');
+  assert.equal(sent.attachments[0].content.toString(), '%PDF-test');
+  assert.equal(sent.html, '&lt;hello&gt;');
+});
+
 function withSmtpTlsMode(mode, callback) {
   const original = process.env.SMTP_TLS_MODE;
   if (mode === undefined) delete process.env.SMTP_TLS_MODE;

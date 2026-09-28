@@ -240,7 +240,7 @@ function companyToData(c) {
 
 function applyTemplate(template, data) {
   if (!template) return '';
-  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => (data[key] ?? '').trim()).replace(/\n\s*\n/g, '\n').trim();
+  return RMS.renderTemplateText(template, data);
 }
 
 function buildLabelHtml(contact, forPrint = false) {
@@ -260,8 +260,8 @@ function buildLabelHtml(contact, forPrint = false) {
   const borderStyle = showBorder || forPrint ? '' : 'border-style:solid;border-color:transparent;';
   const sizeStyle = forPrint
     ? `width:${width}mm;min-height:${height}mm;height:auto;`
-    : `width:${width}mm;height:${height}mm;`;
-  const overflowStyle = forPrint ? 'overflow:visible;' : 'overflow:hidden;';
+    : `width:${width}mm;min-height:${height}mm;height:auto;`;
+  const overflowStyle = 'overflow:visible;';
 
   let toBlock = '';
   let fromBlock = '';
@@ -384,8 +384,8 @@ function buildPrintSheetsHtml() {
   const { width, height } = getLabelDimensions();
   const pageW = 210 - 16;
   const pageH = 297 - 16;
-  const cols = Math.max(1, Math.floor(pageW / width));
-  const rows = Math.max(1, Math.floor(pageH / height));
+  const cols = Math.max(1, Math.floor((pageW + 2) / (width + 2)));
+  const rows = Math.max(1, Math.floor((pageH + 2) / (height + 2)));
   const perPage = cols * rows;
   const contacts = getPrintContacts();
 
@@ -403,36 +403,6 @@ function buildStandalonePrintDocument(autoPrint = false) {
   const content = buildPrintSheetsHtml();
   const script = autoPrint ? '<script>window.onload=function(){setTimeout(function(){window.print();},500);};<\/script>' : '';
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RMS Labels — Print</title><style>${STANDALONE_LABEL_CSS}</style></head><body>${content}${script}</body></html>`;
-}
-
-function renderPdfInIframe() {
-  return new Promise((resolve, reject) => {
-    const iframe = document.createElement('iframe');
-    iframe.setAttribute('aria-hidden', 'true');
-    iframe.style.cssText = 'position:fixed;left:0;top:0;width:794px;height:1123px;border:0;opacity:0;pointer-events:none;z-index:-1';
-    document.body.appendChild(iframe);
-
-    const doc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (!doc) {
-      document.body.removeChild(iframe);
-      reject(new Error('Could not create print frame'));
-      return;
-    }
-
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      resolve({ iframe, body: doc.body });
-    };
-
-    doc.open();
-    doc.write(buildStandalonePrintDocument(false));
-    doc.close();
-
-    iframe.onload = () => setTimeout(finish, 400);
-    setTimeout(finish, 1200);
-  });
 }
 
 function renderPreview() {
@@ -624,12 +594,13 @@ window.downloadLabelsPdf = async () => {
   }
 
   RMS.toast.show('Generating PDF...', 'info');
-  let iframe = null;
-
   try {
-    const rendered = await renderPdfInIframe();
-    iframe = rendered.iframe;
-    const target = rendered.body;
+    // Keep content and its print styles together when html2pdf clones into its render container.
+    // Rendering from an invisible iframe loses the iframe stylesheet during that clone.
+    const target = document.createElement('div');
+    target.style.color = '#000';
+    target.style.background = '#fff';
+    target.innerHTML = `<style>${STANDALONE_LABEL_CSS.replace(/html, body/g, '.pdf-label-root')}</style><div class="pdf-label-root">${buildPrintSheetsHtml()}</div>`;
 
     await html2pdf().set({
       margin: [8, 8, 8, 8],
@@ -645,14 +616,12 @@ window.downloadLabelsPdf = async () => {
         windowWidth: 794
       },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['css', 'legacy'], after: '.print-sheet', avoid: '.print-label' }
+      pagebreak: { mode: ['css', 'legacy'], avoid: '.print-label' }
     }).from(target).save();
 
     RMS.toast.show('PDF downloaded — open the file and print');
   } catch (err) {
     console.error('PDF generation failed:', err);
     RMS.toast.show('PDF generation failed — try Download HTML or Print', 'error');
-  } finally {
-    if (iframe?.parentNode) iframe.parentNode.removeChild(iframe);
   }
 };

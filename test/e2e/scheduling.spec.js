@@ -26,6 +26,7 @@ for (const scenario of [
     await rms.page.goto(scenario.page);
     await rms.page.getByRole('button', { name: scenario.open }).click();
     if (scenario.fill) await rms.page.locator(scenario.fill[0]).fill(scenario.fill[1]);
+    if (scenario.page === '/pages/invitations.html') await rms.page.locator('#eventAudience').selectOption('all');
     await rms.page.locator(scenario.schedule).fill('2026-10-01T10:00');
     await rms.page.getByRole('button', { name: scenario.submit, exact: true }).click();
 

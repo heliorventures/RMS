@@ -15,6 +15,7 @@ const messageSchema = new mongoose.Schema({
   type: { type: String, enum: ['email', 'whatsapp', 'sms'], required: true },
   subject: String,
   body: String,
+  attachments: [String],
   whatsappTemplate: { name: String, language: String, bodyParameters: [String] },
   providerMessageId: String,
   providerAttemptId: String,

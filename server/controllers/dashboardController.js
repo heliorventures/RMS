@@ -83,7 +83,7 @@ const dashboardController = {
         Event.countDocuments({ date: { $gte: startOfToday } }),
         Message.countDocuments(messagesTodayFilter),
         Message.countDocuments({ status: { $in: ['pending', 'scheduled'] } }),
-        Message.countDocuments({ type: 'email', status: 'sent' }),
+        Message.countDocuments({ type: 'email', status: { $in: ['sent', 'delivered', 'read'] } }),
         Message.countDocuments({ type: 'whatsapp', status: { $in: ['sent', 'delivered', 'read'] } }),
         Campaign.countDocuments({ status: { $in: ['running', 'scheduled'] } }),
         birthdaysByMonth(),

@@ -516,14 +516,10 @@ window.saveMembers = async (button) => {
     success: 'Members updated'
   });
   if (result.ok) {
-    const res = result.value;
-    const group = res.data?.group || res.data;
-    const members = res.data?.members || resolveGroupMembers({ ...group, excludedMembers: [...excludedMemberIds], members: [...selectedMemberIds], type: activeGroupType });
-    activeMembers = members;
-    activeMemberPagination = res.data?.pagination || { page: 1, pages: 1, total: members.length };
-    allGroups = allGroups.map(g => g._id === activeGroupId ? { ...g, ...group, memberCount: group.memberCount ?? activeMemberPagination.total ?? members.length } : g);
+    // Static and dynamic saves return different shapes. Reload the authoritative member page.
+    await loadMembersPage(1);
+    allGroups = allGroups.map(g => g._id === activeGroupId ? { ...g, memberCount: activeMemberPagination.total } : g);
     renderGroups();
-    renderMembersModalContent(members);
     if (activeGroupType === 'static') renderModalMemberPicker();
   }
 };

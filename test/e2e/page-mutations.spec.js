@@ -91,17 +91,17 @@ test('festival save failure remains inline and keeps the editor open', async ({ 
   await expect(rms.page.locator('#festivalModal')).toHaveClass(/show/);
 });
 
-test('invitation send reports when delivery queued but status persistence failed', async ({ rms }) => {
-  rms.api.fail('PUT', '/api/events/507f1f77bcf86cd799439015', 500, 'Invitation status persistence failed');
+test('invitation send leaves delivery state to the server job lifecycle', async ({ rms }) => {
   await rms.page.goto('/pages/invitations.html');
   await rms.page.getByRole('button', { name: 'Create Event' }).click();
   await rms.page.locator('#eventTitle').fill('Partial Invitation');
+  await rms.page.locator('#eventAudience').selectOption('all');
   await rms.page.getByRole('button', { name: 'Send', exact: true }).click();
 
-  await expect(rms.page.locator('#eventForm').getByRole('alert')).toContainText('Delivery was queued, but invitation status could not be updated');
   expect(rms.api.requests.filter(request => request.method === 'POST' && request.pathname === '/api/delivery/jobs')).toHaveLength(1);
-  await expect(rms.page.getByText('Invitation queued for delivery', { exact: true })).toHaveCount(0);
-  await expect(rms.page.locator('#eventModal')).toHaveClass(/show/);
+  expect(rms.api.requests.filter(request => request.method === 'PUT' && request.pathname === '/api/events/507f1f77bcf86cd799439015')).toHaveLength(0);
+  await expect(rms.page.getByText('Invitation queued for delivery', { exact: true })).toHaveCount(1);
+  await expect(rms.page.locator('#eventModal')).not.toHaveClass(/show/);
 });
 
 test('festival send reports when delivery queued but status persistence failed', async ({ rms }) => {

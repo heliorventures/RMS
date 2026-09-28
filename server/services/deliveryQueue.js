@@ -1,4 +1,5 @@
 const logger = require('../utils/logger');
+const Event = require('../models/Event');
 const messageStore = require('./messageStore');
 const emailService = require('./emailService');
 const { validateEmail, validatePhone } = require('../utils/validators');
@@ -49,10 +50,18 @@ async function processMessage(message, settings, job) {
       to: validation.value,
       subject: message.subject,
       body: message.body,
+      attachments: message.attachments || [],
       fromName: settings.smtp?.fromName
     });
   } else {
     result = { success: false, error: 'SMS channel not yet implemented' };
+  }
+
+  if (result.mode === 'dry-run') {
+    const reason = 'Email dry run: no email was sent.';
+    await messageStore.updateMessage(message._id, { status: 'skipped', error: reason, failureReason: reason,
+      attempts: [...(message.attempts || []), { at: new Date(), status: 'skipped', error: reason }] });
+    return { outcome: 'skipped' };
   }
 
   const attempt = {
@@ -64,9 +73,10 @@ async function processMessage(message, settings, job) {
 
   if (result.success) {
     await messageStore.updateMessage(message._id, {
-      status: 'delivered',
+      status: 'sent',
       sentAt: new Date(),
-      deliveredAt: new Date(),
+      deliveredAt: null,
+      providerMessageId: result.messageId,
       error: null,
       failureReason: null,
       attempts
@@ -77,12 +87,12 @@ async function processMessage(message, settings, job) {
       type: message.type,
       subject: message.subject,
       message: (message.body || '').substring(0, 500),
-      status: 'delivered',
+      status: 'sent',
       sentBy: job?.createdBy || 'RMS System',
       sentAt: new Date()
     });
-    logger.info('Message delivered', { messageId: message._id, type: message.type, recipient: message.recipient });
-    return { outcome: 'delivered' };
+    logger.info('Message accepted by SMTP', { messageId: message._id, type: message.type });
+    return { outcome: 'sent' };
   }
 
   const nextRetry = (message.retryCount || 0) + 1;
@@ -135,10 +145,10 @@ async function finalizeJob(jobId) {
 
   let status = job.status;
   if (stats.pending > 0 || stats.retrying > 0) {
-    status = 'processing';
-  } else if (stats.failed > 0 && stats.delivered + stats.sent + stats.skipped > 0) {
+    status = job.scheduledAt && new Date(job.scheduledAt) > new Date() ? 'scheduled' : 'processing';
+  } else if (stats.failed + stats.skipped > 0 && stats.delivered + stats.sent > 0) {
     status = 'partial';
-  } else if (stats.failed > 0 && stats.delivered === 0 && stats.sent === 0) {
+  } else if (stats.failed + stats.skipped > 0 && stats.delivered === 0 && stats.sent === 0) {
     status = 'failed';
   } else {
     status = 'completed';
@@ -151,6 +161,7 @@ async function finalizeJob(jobId) {
   };
 
   await messageStore.updateJob(jobId, updates);
+  await syncEventStatus(job, status);
 
   if (job.campaignId) {
     await messageStore.updateCampaign(job.campaignId, {
@@ -182,6 +193,7 @@ async function processBatch() {
       jobs[jid] = await messageStore.getJob(jid);
       if (jobs[jid] && ['queued', 'scheduled'].includes(jobs[jid].status)) {
         await messageStore.updateJob(jid, { status: 'processing', startedAt: new Date() });
+        await syncEventStatus(jobs[jid], 'processing');
       }
     }
 
@@ -197,6 +209,15 @@ async function processBatch() {
     logger.error('Delivery batch error', { error: err.message, stack: err.stack });
   } finally {
     processing = false;
+  }
+}
+
+async function syncEventStatus(job, status) {
+  if (!job?.eventId) return;
+  try {
+    await Event.findByIdAndUpdate(job.eventId, { status, deliveryJobId: job._id }, { new: true, runValidators: true });
+  } catch (error) {
+    logger.error('Invitation delivery status update failed', { eventId: job.eventId, jobId: job._id, error: error.message });
   }
 }
 

@@ -3,6 +3,25 @@ const id = RMS.utils.queryParams().id;
 if (!id) { document.getElementById('pageBody').innerHTML = '<div class="alert alert-warning">Contact not found</div>'; }
 else loadProfile(id);
 
+window.openContactMessage = async channel => {
+  let modal = document.getElementById('contactMessageModal');
+  if (!modal) {
+    document.body.insertAdjacentHTML('beforeend', `<div class="modal fade" id="contactMessageModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Message contact</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"><form id="contactMessageForm"><div id="contactEmailFields"><label for="contactMessageSubject" class="form-label">Subject</label><input class="form-control mb-3" id="contactMessageSubject" maxlength="200"><label for="contactMessageBody" class="form-label">Message</label><textarea class="form-control" id="contactMessageBody" rows="5"></textarea></div><p class="d-none" id="contactWhatsAppNote">Choose an approved WhatsApp template in the next step. Delivery uses the contact's recorded permission.</p></form></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="button" id="contactMessageSend" class="btn btn-primary">Queue message</button></div></div></div></div>`);
+    modal = document.getElementById('contactMessageModal');
+  }
+  RMS.mutations.clearFormErrors(document.getElementById('contactMessageForm'));
+  document.getElementById('contactEmailFields').classList.toggle('d-none', channel !== 'email');
+  document.getElementById('contactWhatsAppNote').classList.toggle('d-none', channel !== 'whatsapp');
+  document.getElementById('contactMessageSend').onclick = async function () {
+    const subject = document.getElementById('contactMessageSubject').value.trim();
+    const body = document.getElementById('contactMessageBody').value.trim();
+    if (channel === 'email' && (!subject || !body)) return RMS.mutations.showValidationError('#contactMessageForm', 'Enter a subject and message');
+    const job = await RMS.utils.queueDeliveryJob({ type: 'bulk', name: 'Contact message', channel, contactIds: [id], subject, body }, { button: this, form: '#contactMessageForm' });
+    if (job) bootstrap.Modal.getInstance(modal).hide();
+  };
+  bootstrap.Modal.getOrCreateInstance(modal).show();
+};
+
 async function loadProfile(contactId) {
   const [contactRes, commRes] = await Promise.all([
     RMS.api.get(`/contacts/${contactId}`),
@@ -14,24 +33,24 @@ async function loadProfile(contactId) {
 
   document.getElementById('pageActions').innerHTML = `
     <a href="/pages/contacts.html" class="btn btn-outline-secondary me-2"><i class="bi bi-arrow-left"></i> Back</a>
-    <a href="/pages/labels.html?ids=${c._id}" class="btn btn-outline-primary me-2"><i class="bi bi-tag"></i> Print Label</a>
-    <a class="btn btn-primary" href="/pages/contacts.html?edit=${c._id}"><i class="bi bi-pencil"></i> Edit</a>`;
+    <a href="/pages/labels.html?ids=${encodeURIComponent(c._id)}" class="btn btn-outline-primary me-2"><i class="bi bi-tag"></i> Print Label</a>
+    <a class="btn btn-primary" href="/pages/contacts.html?edit=${encodeURIComponent(c._id)}"><i class="bi bi-pencil"></i> Edit</a>`;
 
   document.getElementById('pageBody').innerHTML = `
     <div class="profile-header mb-4">
-      <div class="avatar avatar-lg">${RMS.utils.getInitials(c.firstName, c.lastName)}</div>
+      <div class="avatar avatar-lg">${escapeProfile(RMS.utils.getInitials(c.firstName, c.lastName))}</div>
       <div class="flex-grow-1">
-        <h2 class="mb-1">${c.firstName} ${c.lastName} ${c.status === 'VIP' ? '<span class="badge bg-warning text-dark ms-2">VIP</span>' : ''}</h2>
-        <p class="mb-2 opacity-75">${c.designation || ''} ${c.company ? 'at ' + c.company : ''}</p>
+        <h2 class="mb-1">${escapeProfile(c.firstName)} ${escapeProfile(c.lastName)} ${c.status === 'VIP' ? '<span class="badge bg-warning text-dark ms-2">VIP</span>' : ''}</h2>
+        <p class="mb-2 opacity-75">${escapeProfile(c.designation)} ${c.company ? 'at ' + escapeProfile(c.company) : ''}</p>
         <div class="d-flex gap-3 flex-wrap">
-          <span><i class="bi bi-telephone me-1"></i>${c.mobile || '-'}</span>
-          <span><i class="bi bi-envelope me-1"></i>${c.email || '-'}</span>
-          <span><i class="bi bi-geo-alt me-1"></i>${c.city || '-'}</span>
+          <span><i class="bi bi-telephone me-1"></i>${escapeProfile(c.mobile, '-')}</span>
+          <span><i class="bi bi-envelope me-1"></i>${escapeProfile(c.email, '-')}</span>
+          <span><i class="bi bi-geo-alt me-1"></i>${escapeProfile(c.city, '-')}</span>
         </div>
       </div>
       <div class="d-flex gap-2">
-        <button class="btn btn-light btn-sm"><i class="bi bi-envelope"></i> Email</button>
-        <button class="btn btn-light btn-sm"><i class="bi bi-whatsapp"></i> WhatsApp</button>
+        <button class="btn btn-light btn-sm" onclick="openContactMessage('email')" ${!c.email ? 'disabled title="No email address on this contact"' : ''}><i class="bi bi-envelope"></i> Email</button>
+        <button class="btn btn-light btn-sm" onclick="openContactMessage('whatsapp')" ${!(c.whatsapp || c.mobile) ? 'disabled title="No phone number on this contact"' : ''}><i class="bi bi-whatsapp"></i> WhatsApp</button>
       </div>
     </div>
 
@@ -53,20 +72,20 @@ async function loadProfile(contactId) {
             ${infoItem('State', c.state)} ${infoItem('Pincode', c.pincode)}
             ${infoItem('Status', c.status)} ${infoItem('Tags', (c.tags||[]).join(', ') || '-')}
           </div>
-          ${c.notes ? `<hr><h6>Notes</h6><p class="text-secondary">${c.notes}</p>` : ''}
+          ${c.notes ? `<hr><h6>Notes</h6><p class="text-secondary">${escapeProfile(c.notes)}</p>` : ''}
         </div></div>
       </div>
       <div class="tab-pane fade" id="timeline" role="tabpanel" aria-labelledby="timelineTab">
         <div class="card"><div class="card-body"><div class="timeline">
-          ${(c.timeline||[{action:'Created',description:'Contact profile created',date:c.createdAt,user:'System'}]).map(t => `
-            <div class="timeline-item"><div class="fw-semibold">${t.action}</div><div class="text-secondary small">${t.description}</div><div class="time">${RMS.utils.formatDateTime(t.date)} · ${t.user||''}</div></div>`).join('')}
+          ${(c.timeline?.length ? c.timeline : [{action:'Created',description:'Contact profile created',date:c.createdAt,user:'System'}]).map(t => `
+            <div class="timeline-item"><div class="fw-semibold">${escapeProfile(t.action)}</div><div class="text-secondary small">${escapeProfile(t.description)}</div><div class="time">${escapeProfile(RMS.utils.formatDateTime(t.date))} · ${escapeProfile(t.user)}</div></div>`).join('')}
         </div></div></div>
       </div>
       <div class="tab-pane fade" id="communication" role="tabpanel" aria-labelledby="communicationTab">
         <div class="card"><div class="card-body p-0">
           ${comm.length ? comm.map(h => `<div class="d-flex gap-3 p-3 border-bottom">
             <div class="stat-icon primary" style="width:36px;height:36px"><i class="bi bi-${h.type==='email'?'envelope':h.type==='whatsapp'?'whatsapp':'chat'}"></i></div>
-            <div class="flex-grow-1"><div class="fw-semibold">${h.subject||h.type}</div><div class="small text-secondary">${h.message}</div><div class="time">${RMS.utils.formatDateTime(h.sentAt)} · ${RMS.utils.statusBadge(h.status)}</div></div>
+            <div class="flex-grow-1"><div class="fw-semibold">${escapeProfile(h.subject || h.type)}</div><div class="small text-secondary">${escapeProfile(h.message)}</div><div class="time">${escapeProfile(RMS.utils.formatDateTime(h.sentAt))} · ${RMS.utils.statusBadge(h.status)}</div></div>
           </div>`).join('') : '<div class="empty-state"><i class="bi bi-chat-dots d-block"></i>No communication history</div>'}
         </div></div>
       </div>
@@ -98,5 +117,10 @@ async function renderWhatsAppConsent(contactId) {
 }
 
 function infoItem(label, value) {
-  return `<div class="info-item"><label>${label}</label><p>${value || '-'}</p></div>`;
+  return `<div class="info-item"><label>${escapeProfile(label)}</label><p>${escapeProfile(value, '-')}</p></div>`;
+}
+
+function escapeProfile(value, fallback = '') {
+  const text = value === undefined || value === null || value === '' ? fallback : String(value);
+  return text.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 }

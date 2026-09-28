@@ -95,7 +95,7 @@ async function verifySmtp(smtp) {
   }
 }
 
-async function sendEmail({ smtp, to, subject, body, fromName }) {
+async function sendEmail({ smtp, to, subject, body = '', fromName, attachments = [] }) {
   if (isDryRun()) {
     logger.info('DRY RUN email', { to, subject });
     return { success: true, messageId: `dry-${Date.now()}`, mode: 'dry-run' };
@@ -115,8 +115,9 @@ async function sendEmail({ smtp, to, subject, body, fromName }) {
       from,
       to,
       subject: subject || 'Message from RMS',
+      attachments: await require('../utils/invitationAttachments').mailAttachments(attachments),
       text: body,
-      html: body.replace(/\n/g, '<br>')
+      html: body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
     });
     logger.info('Email sent', { to, messageId: info.messageId });
     return { success: true, messageId: info.messageId, mode: 'smtp' };

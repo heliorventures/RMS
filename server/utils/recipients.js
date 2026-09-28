@@ -12,7 +12,7 @@ function applyTemplate(text, contact) {
     Mobile: contact.mobile || '',
     Email: contact.email || ''
   };
-  return text.replace(/\{\{(\w+)\}\}/g, (_, key) => data[key] ?? data[key.charAt(0).toUpperCase() + key.slice(1)] ?? '');
+  return require('../../public/assets/js/templateText')(text, data);
 }
 
 function matchRule(contact, rule) {

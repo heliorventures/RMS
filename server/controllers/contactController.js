@@ -58,6 +58,17 @@ function annualDateFilter(field, dates) {
 }
 
 const contactController = {
+  async getFilterOptions(req, res) {
+    try {
+      const entries = await Promise.all(['city', 'sector', 'religion'].map(async key => {
+        const values = await Contact.distinct(key);
+        return [key, [...new Set([...contactData.choices[key], ...values.filter(value => typeof value === 'string' && value.trim())])].sort((a, b) => a.localeCompare(b))];
+      }));
+      res.json({ success: true, data: Object.fromEntries(entries) });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  },
   async getAll(req, res) {
     try {
       const { sort = 'firstName', order = 'asc', search = '', ...filters } = req.query;

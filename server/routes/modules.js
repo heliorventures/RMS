@@ -1,9 +1,7 @@
 const express = require('express');
 const createCrud = require('../controllers/crudFactory');
-const Festival = require('../models/Festival');
 const Event = require('../models/Event');
 const Template = require('../models/Template');
-const Campaign = require('../models/Campaign');
 const CommunicationHistory = require('../models/CommunicationHistory');
 const Notification = require('../models/Notification');
 const upload = require('../middleware/upload');
@@ -17,10 +15,10 @@ function mountCrud(router, ctrl) {
   router.delete('/:id', ctrl.remove);
 }
 
-const festivalCtrl = createCrud(Festival, 'festivals');
+const festivalCtrl = require('../controllers/festivalController');
 const eventCtrl = createCrud(Event, 'events');
 const templateCtrl = createCrud(Template, 'templates');
-const campaignCtrl = createCrud(Campaign, 'campaigns');
+const campaignCtrl = require('../controllers/campaignController');
 const commCtrl = createCrud(CommunicationHistory, 'communicationHistory');
 const notifCtrl = createCrud(Notification, 'notifications');
 

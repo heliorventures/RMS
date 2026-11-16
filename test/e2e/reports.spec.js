@@ -10,9 +10,9 @@ test('reports page renders deterministic API totals', async ({ rms }) => {
 
 test('dashboard chart uses exact API message totals', async ({ rms }) => {
   await rms.page.goto('/pages/dashboard.html');
-  await expect.poll(async () => rms.page.evaluate(() => window.__chartConfigs?.length || 0)).toBeGreaterThan(0);
+  await expect.poll(async () => rms.page.evaluate(() => Boolean(window.Chart?.getChart('messagesChart')))).toBe(true);
 
-  const chart = await rms.page.evaluate(() => window.__chartConfigs.find(config => config.type === 'line'));
+  const chart = await rms.page.evaluate(() => ({ data: Chart.getChart('messagesChart').data }));
   expect(chart.data.labels).toEqual(['2026-09']);
   expect(chart.data.datasets[0].data).toEqual([12]);
   expect(chart.data.datasets[1].data).toEqual([4]);

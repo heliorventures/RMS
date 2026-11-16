@@ -4,7 +4,7 @@ const Campaign = require('../models/Campaign');
 const CommunicationHistory = require('../models/CommunicationHistory');
 const Notification = require('../models/Notification');
 const Event = require('../models/Event');
-const { getMonthlyChannelSeries } = require('../services/reportService');
+const { getMonthlyChannelSeries, SENT_STATUSES } = require('../services/reportService');
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -60,21 +60,21 @@ const dashboardController = {
       startOfToday.setHours(0, 0, 0, 0);
       const startOfTomorrow = new Date(startOfToday);
       startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const todayBirthdayFilter = annualDateFilter('dob', datesFromToday(0, true));
       const upcomingBirthdayFilter = annualDateFilter('dob', datesFromToday(30));
       const upcomingAnniversaryFilter = annualDateFilter('anniversary', datesFromToday(30));
       const messagesTodayFilter = {
-        $or: [
-          { sentAt: { $gte: startOfToday, $lt: startOfTomorrow } },
-          { sentAt: null, createdAt: { $gte: startOfToday, $lt: startOfTomorrow } }
-        ]
+        status: { $in: SENT_STATUSES },
+        sentAt: { $gte: startOfToday, $lt: startOfTomorrow }
       };
 
       const [
         totalContacts, todayBirthdays, upcomingBirthdays, upcomingAnniversaries, upcomingEvents,
         messagesToday, pendingMessages, emailSent, whatsappSent, activeCampaigns,
         birthdayMonths, contactsBySector, contactsByReligion, messagesByMonth,
-        recentActivities, recentContacts, notifications, todayBirthdaysList, upcomingBirthdaysList
+        recentActivities, recentContacts, notifications, todayBirthdaysList, upcomingBirthdaysList,
+        addedThisMonth, contactsBeforeMonth
       ] = await Promise.all([
         Contact.countDocuments(),
         Contact.countDocuments(todayBirthdayFilter),
@@ -94,13 +94,21 @@ const dashboardController = {
         Contact.find().sort({ createdAt: -1, _id: -1 }).limit(5).lean(),
         Notification.find().sort({ createdAt: -1 }).limit(10).lean(),
         Contact.find(todayBirthdayFilter).sort({ firstName: 1, _id: 1 }).limit(5).lean(),
-        Contact.find(upcomingBirthdayFilter).sort({ firstName: 1, _id: 1 }).limit(5).lean()
+        Contact.find(upcomingBirthdayFilter).sort({ firstName: 1, _id: 1 }).limit(5).lean(),
+        Contact.countDocuments({ createdAt: { $gte: startOfMonth, $lte: now } }),
+        Contact.countDocuments({ createdAt: { $lt: startOfMonth } })
       ]);
+
+      const contactGrowth = {
+        addedThisMonth,
+        baseline: contactsBeforeMonth,
+        percent: contactsBeforeMonth > 0 ? Math.round(addedThisMonth / contactsBeforeMonth * 1000) / 10 : null
+      };
 
       res.json({
         success: true,
         data: {
-          stats: { totalContacts, todayBirthdays, upcomingBirthdays, upcomingAnniversaries, upcomingEvents, messagesToday, pendingMessages, emailSent, whatsappSent, activeCampaigns },
+          stats: { totalContacts, contactGrowth, todayBirthdays, upcomingBirthdays, upcomingAnniversaries, upcomingEvents, messagesToday, pendingMessages, emailSent, whatsappSent, activeCampaigns },
           charts: { birthdaysByMonth: birthdayMonths, contactsBySector, contactsByReligion, messagesByMonth },
           recentActivities,
           recentContacts,

@@ -5,6 +5,7 @@ const festivalSchema = new mongoose.Schema({
   date: { type: Date, required: true },
   religion: String,
   message: String,
+  channel: { type: String, enum: ['email', 'whatsapp', 'both'], default: 'email' },
   image: String,
   templateId: { type: mongoose.Schema.Types.ObjectId, ref: 'Template' },
   recipients: {
@@ -15,6 +16,8 @@ const festivalSchema = new mongoose.Schema({
   },
   scheduledAt: Date,
   scheduleTimezone: String,
+  deliveryJobId: { type: mongoose.Schema.Types.ObjectId, ref: 'DeliveryJob' },
+  deliveryStatus: String,
   status: { type: String, enum: ['draft', 'scheduled', 'sent'], default: 'draft' },
   sentCount: { type: Number, default: 0 }
 }, { timestamps: true });

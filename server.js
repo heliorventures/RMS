@@ -101,6 +101,7 @@ app.use('/api', require('./server/routes/misc'));
 
 async function start() {
   await connectDB();
+  await require('./server/services/templateDefaults').initializeTemplateDefaults();
   await require('./server/models/WhatsAppConsent').init();
 
   app.listen(PORT, () => {

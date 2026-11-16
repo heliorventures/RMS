@@ -54,7 +54,7 @@
       if ((!partial || key in data) && !data[key]) return `${key === 'firstName' ? 'First' : 'Last'} name is required`;
     }
     for (const [key, max] of Object.entries(limits)) if (data[key]?.length > max) return `${key} must be at most ${max} characters`;
-    for (const key of ['gender', 'status']) if (data[key] && !choices[key].includes(data[key])) return `Invalid ${key}: use ${choices[key].join(', ')}`;
+    for (const key of Object.keys(choices)) if (data[key] && !choices[key].includes(data[key])) return `Invalid ${key}: use ${choices[key].join(', ')}`;
     if (data.email && (data.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email))) return 'Invalid email address';
     for (const key of ['mobile', 'whatsapp']) if (data[key] && !/^\+?[1-9]\d{7,14}$/.test(data[key])) return `Invalid ${key}: enter 8 to 15 digits, optionally starting with +`;
     if (data.pincode && !/^\d{6}$/.test(data.pincode)) return 'Pincode must contain 6 digits';
@@ -78,5 +78,26 @@
     row.push(cell.trim()); if (row.some(Boolean)) records.push(row);
     return records;
   }
-  return { choices, limits, date, phone, normalize, validate, csvRecords };
+  function populateFilter(select, values) {
+    if (!select) return;
+    const current = select.value;
+    const selected = new Set(Array.from(select.selectedOptions || []).map(option => option.value));
+    const empty = select.options[0]?.value === '' ? select.options[0].cloneNode(true) : null;
+    select.replaceChildren();
+    if (empty) select.add(empty);
+    for (const value of values) select.add(new Option(value, value));
+    for (const value of select.multiple ? selected : [current]) {
+      if (value && !values.includes(value)) select.add(new Option(value, value));
+    }
+    if (select.multiple) {
+      for (const option of select.options) option.selected = selected.has(option.value);
+    } else select.value = current;
+  }
+  async function loadFilterOptions() {
+    const response = await globalThis.RMS.api.get('/contacts/filter-options');
+    return Object.fromEntries(['city', 'sector', 'religion'].map(key => [key,
+      [...new Set([...choices[key], ...(Array.isArray(response?.data?.[key]) ? response.data[key].filter(value => typeof value === 'string' && value) : [])])]
+    ]));
+  }
+  return { choices, limits, date, phone, normalize, validate, csvRecords, populateFilter, loadFilterOptions };
 });

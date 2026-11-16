@@ -63,7 +63,7 @@ test('stale selected recipients never fall back to all contacts', async t => {
   t.mock.method(store, 'getAllGroups', async () => []);
   const create = t.mock.method(store, 'createJob', async () => { throw new Error('No broadcast'); });
   const res = { status(value) { this.code = value; return this; }, json(value) { this.body = value; return this; } };
-  await controller.createDeliveryJob({ body: { contactIds: ['deleted-contact'], campaignId: 'campaign-1', subject: 'Hello', body: 'Hello' } }, res);
+  await controller.createDeliveryJob({ body: { contactIds: ['deleted-contact'], subject: 'Hello', body: 'Hello' } }, res);
   assert.equal(res.code, 400);
   assert.equal(create.mock.callCount(), 0);
 });

@@ -22,6 +22,7 @@ function normalizeSchedule({ scheduledAt, scheduleTimezone } = {}) {
     throw new ScheduleValidationError('scheduledAt must be an ISO UTC instant ending in Z.');
   }
   const instant = new Date(scheduledAt);
+  if (Number(scheduledAt.slice(0, 4)) < 1900) throw new ScheduleValidationError('Schedule year must be between 1900 and 9999.');
   if (Number.isNaN(instant.getTime())) throw new ScheduleValidationError('scheduledAt must be a valid ISO UTC instant.');
   const canonicalInput = scheduledAt.length === 20 ? scheduledAt.slice(0, -1) + '.000Z' : scheduledAt;
   if (instant.toISOString() !== canonicalInput) throw new ScheduleValidationError('scheduledAt must be a valid calendar date.');

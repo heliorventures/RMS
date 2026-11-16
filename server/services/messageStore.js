@@ -156,6 +156,9 @@ async function updateCampaign(id, updates, jobId) {
 async function prepareCampaign(id, jobId, updates) {
   const current = await Campaign.findById(id).lean();
   if (!current) throw Object.assign(new Error('Campaign no longer exists.'), { status: 404 });
+  if (current.status !== 'draft') {
+    throw Object.assign(new Error('This campaign has already been scheduled. Reload before creating another delivery.'), { status: 409 });
+  }
   if (current.deliveryJobId) {
     const previousJob = await getJob(current.deliveryJobId);
     if (!previousJob || ['preparing', 'aborted'].includes(previousJob.publicationState)) {
@@ -165,7 +168,7 @@ async function prepareCampaign(id, jobId, updates) {
   // Never snapshot another unfinished preparation: two overlapping aborts must
   // not restore one another's temporary running state. The ownership comparison
   // closes the interval between reading the prior job and taking ownership.
-  const previous = await Campaign.findOneAndUpdate({ _id: id, deliveryJobId: current.deliveryJobId || null },
+  const previous = await Campaign.findOneAndUpdate({ _id: id, status: 'draft', deliveryJobId: current.deliveryJobId || null },
     { $set: { ...updates, deliveryJobId: jobId } }, { new: false }).lean();
   if (!previous) throw Object.assign(new Error('Campaign delivery changed. Reload before sending again.'), { status: 409 });
   return previous;

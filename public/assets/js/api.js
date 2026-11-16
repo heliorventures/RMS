@@ -18,6 +18,7 @@ window.RMS.api = {
     const isAuthRoute = endpoint.startsWith('/auth/login');
     const {
       timeout = this.timeout,
+      responseType = 'json',
       signal: externalSignal,
       headers: optionHeaders,
       ...fetchOptions
@@ -48,6 +49,14 @@ window.RMS.api = {
         headers
       });
       const requestId = response.headers.get('x-request-id');
+      if (response.ok && responseType === 'csv') {
+        if (!/^text\/csv\b/i.test(response.headers.get('content-type') || '')) {
+          throw new ApiError('Server returned an invalid CSV download. Please try again.', {
+            status: response.status, code: 'INVALID_DOWNLOAD', requestId
+          });
+        }
+        return await response.blob();
+      }
       const responseText = await response.text();
       let data = {};
 
@@ -109,6 +118,21 @@ window.RMS.api = {
       429: 'Too many requests. Wait a moment and try again.'
     };
     return messages[status] || 'The request could not be completed. Please try again.';
+  },
+
+  async download(endpoint, filename) {
+    const blob = await this._fetch(endpoint, { responseType: 'csv', timeout: 120_000 });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    try {
+      link.click();
+    } finally {
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
   },
 
   get: (endpoint, options) => window.RMS.api._fetch(endpoint, options),

@@ -46,7 +46,7 @@ document.getElementById('pageBody').innerHTML = `
           <ol class="small text-secondary mb-3">
             <li>Download the <a href="/assets/templates/contacts-import-template.csv" download>CSV template</a></li>
             <li>Fill in contact details (First Name and Last Name are required)</li>
-            <li>Use YYYY-MM-DD or DD-MM-YYYY dates. In Excel, format phone columns as Text to preserve + and leading digits.</li>
+            <li>Use YYYY-MM-DD or DD-MM-YYYY dates. Keep the leading apostrophe in sample phone numbers, or format phone columns as Text before entering numbers in Excel, to preserve + and every digit.</li>
             <li>Upload the CSV file — supports 50,000+ contacts via batch import</li>
           </ol>
           <div class="mb-3">
@@ -131,6 +131,14 @@ if (RMS.utils.queryParams().action === 'create') {
 ['city','filterCity'].forEach(id => { const el = document.getElementById(id); if (el) CITIES.forEach(c => { el.innerHTML += `<option>${c}</option>`; }); });
 ['sector','filterSector'].forEach(id => { const el = document.getElementById(id); if (el) SECTORS.forEach(s => { el.innerHTML += `<option>${s}</option>`; }); });
 ['religion','filterReligion'].forEach(id => { const el = document.getElementById(id); if (el) RELIGIONS.forEach(r => { el.innerHTML += `<option>${r}</option>`; }); });
+
+RMS.contactData.loadFilterOptions().then(options => {
+  for (const key of ['city', 'sector', 'religion']) {
+    const select = document.getElementById(`filter${key[0].toUpperCase()}${key.slice(1)}`);
+    RMS.contactData.populateFilter(select, options[key]);
+    select.value = activeFilters[key];
+  }
+}).catch(() => RMS.toast.show('Could not load all contact filter values. Reload to try again.', 'warning'));
 
 ['city', 'sector', 'religion', 'status'].forEach(key => {
   activeFilters[key] = contactUrl.read(contactUrl.keys[key]);
@@ -231,6 +239,7 @@ function reloadTable() {
 
 window.openContactModal = () => {
   document.getElementById('contactForm').reset();
+  RMS.mutations.clearFormErrors(document.getElementById('contactForm'));
   document.getElementById('contactId').value = '';
   document.getElementById('contactModalTitle').textContent = 'Add Contact';
   contactUrl.set({ [contactUrl.keys.edit]: null }, { replace: true });
@@ -243,6 +252,7 @@ window.editContact = async (id) => {
     RMS.toast.show('Contact not found', 'error');
     return;
   }
+  RMS.mutations.clearFormErrors(document.getElementById('contactForm'));
   contactUrl.set({ [contactUrl.keys.edit]: c._id }, { replace: true });
   document.getElementById('contactId').value = c._id;
   document.getElementById('contactModalTitle').textContent = 'Edit Contact';
@@ -330,16 +340,13 @@ contactUrl.onPopState(() => {
 
 window.exportContacts = async () => {
   RMS.toast.show('Preparing export…', 'info');
-  const res = await RMS.api.post('/exports/contacts', { filters: activeFilters });
-  const downloadUrl = res?.data?.downloadUrl;
-  if (!downloadUrl) return RMS.toast.show('Could not prepare the export. Please try again.', 'error');
-  const link = document.createElement('a');
-  link.href = downloadUrl;
-  link.download = 'contacts.csv';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  RMS.toast.show('Your export is downloading', 'success');
+  try {
+    const res = await RMS.api.post('/exports/contacts', { filters: activeFilters });
+    const downloadUrl = res?.data?.downloadUrl;
+    if (!downloadUrl) throw new Error('Could not prepare the export. Please try again.');
+    await RMS.api.download(downloadUrl.replace(/^\/api/, ''), 'contacts.csv');
+    RMS.toast.show('Your export is downloading', 'success');
+  } catch (error) { RMS.toast.show(error.message || 'Contact export failed', 'error'); }
 };
 
 window.startBulkUpload = async (button) => {

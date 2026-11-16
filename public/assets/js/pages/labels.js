@@ -163,7 +163,7 @@ async function initLabels() {
 
   const groups = groupsRes?.data || [];
   document.getElementById('groupFilter').innerHTML = '<option value="">Add from group...</option>' +
-    groups.map(g => `<option value="${g._id}">${g.name} (${g.memberCount || 0})</option>`).join('');
+    groups.map(g => `<option value="${g._id}">${escapeHtml(g.name)} (${g.memberCount || 0})</option>`).join('');
 
   ['labelWidth', 'labelHeight', 'labelFontSize', 'toHeading', 'fromHeading'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', renderPreview);
@@ -240,7 +240,7 @@ function companyToData(c) {
 
 function applyTemplate(template, data) {
   if (!template) return '';
-  return RMS.renderTemplateText(template, data);
+  return RMS.renderTemplateText(template, data, { compact: true });
 }
 
 function buildLabelHtml(contact, forPrint = false) {
@@ -290,7 +290,7 @@ function buildLabelHtml(contact, forPrint = false) {
 }
 
 function escapeHtml(str) {
-  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return RMS.utils.escapeHtml(str);
 }
 
 function setOutputButtonsEnabled(enabled) {
@@ -433,7 +433,7 @@ function updateSelectedUI() {
   document.getElementById('clearBtn').style.display = selectedContacts.length ? '' : 'none';
   document.getElementById('selectedChips').innerHTML = selectedContacts.map(c => `
     <span class="selected-contact-chip">
-      ${c.firstName} ${c.lastName}
+      ${escapeHtml(c.firstName)} ${escapeHtml(c.lastName)}
       <button type="button" onclick="removeContact('${c._id}')" aria-label="Remove contact"><i class="bi bi-x"></i></button>
     </span>`).join('');
   renderPreview();
@@ -475,10 +475,10 @@ const searchContacts = RMS.utils.debounce(async () => {
     ? list.map((c, i) => `
       <button type="button" class="list-group-item list-group-item-action contact-pick-item py-2" onclick="pickContactByIndex(${i})">
         <div class="d-flex justify-content-between">
-          <strong>${c.firstName} ${c.lastName}</strong>
-          <small class="text-secondary">${c.city || ''}</small>
+          <strong>${escapeHtml(c.firstName)} ${escapeHtml(c.lastName)}</strong>
+          <small class="text-secondary">${escapeHtml(c.city)}</small>
         </div>
-        <small class="text-secondary">${RMS.utils.formatContactSubtitle(c) || c.mobile || ''}</small>
+        <small class="text-secondary">${escapeHtml(RMS.utils.formatContactSubtitle(c) || c.mobile)}</small>
       </button>`).join('')
     : '<div class="list-group-item text-secondary small">No contacts found</div>';
 }, 300);
@@ -607,13 +607,12 @@ window.downloadLabelsPdf = async () => {
       filename: `rms-labels-${new Date().toISOString().slice(0, 10)}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: {
+        // Keep the clone viewport equal to the source viewport so centered labels retain their capture coordinates.
         scale: 2,
         scrollY: 0,
         scrollX: 0,
         useCORS: true,
-        logging: false,
-        width: 794,
-        windowWidth: 794
+        logging: false
       },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['css', 'legacy'], avoid: '.print-label' }

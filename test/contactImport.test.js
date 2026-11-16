@@ -33,3 +33,36 @@ test('CSV supports quoted multiline notes and excludes empty rows', () => {
   assert.equal(rows[0].notes, 'Line one\nLine two');
   assert.deepEqual(parseCSV('First Name,Last Name\n,\n'), []);
 });
+
+test('invalid configured city, sector and religion are rejected with their row numbers', () => {
+  for (const field of ['city', 'sector', 'religion']) {
+    const result = prepareContacts([{ firstName: 'Example', lastName: 'Contact', [field]: 'Not a configured value' }]);
+    assert.equal(result.valid.length, 0, field);
+    assert.equal(result.errors[0].row, 2);
+    assert.match(result.errors[0].message, new RegExp(field));
+  }
+});
+
+test('phone imports retain explicit international prefixes and reject spreadsheet formulas', () => {
+  for (const phone of ['+91 98765 43210', '00919876543210', "'919876543210", '919876543210']) {
+    const result = prepareContacts(parseCSV(`First Name,Last Name,Mobile\nExample,Contact,${phone}\n`));
+    assert.deepEqual(result.errors, []);
+    assert.equal(result.valid[0].mobile, '+919876543210');
+  }
+  const formula = prepareContacts([{ firstName: 'Example', lastName: 'Contact', mobile: '=919876543210' }]);
+  assert.equal(formula.valid.length, 0);
+});
+
+test('downloaded CSV template keeps phone examples as spreadsheet text before import', () => {
+  const template = require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/assets/templates/contacts-import-template.csv'), 'utf8');
+  const rows = parseCSV(template);
+  for (const row of rows) {
+    assert.match(row.mobile, /^'\+/, 'Phone examples must not be Excel numeric formulas');
+    assert.match(row.whatsapp, /^'\+/);
+  }
+  const result = prepareContacts(rows);
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.valid[0].mobile, '+919876543210');
+  const rounded = prepareContacts([{ firstName: 'Example', lastName: 'Contact', mobile: '9.19877E+11' }]);
+  assert.equal(rounded.valid.length, 0, 'Rounded spreadsheet notation cannot establish the original digits');
+});

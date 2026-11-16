@@ -1,5 +1,6 @@
 const logger = require('../utils/logger');
 const { syncEventStatus } = require('./invitationLifecycle');
+const { syncFestivalStatus } = require('./festivalLifecycle');
 const messageStore = require('./messageStore');
 const emailService = require('./emailService');
 const { validateEmail, validatePhone } = require('../utils/validators');
@@ -162,6 +163,7 @@ async function finalizeJob(jobId) {
 
   await messageStore.updateJob(jobId, updates);
   await syncEventStatus(job, status);
+  await syncFestivalStatus(job, status, stats);
 
   if (job.campaignId) {
     await messageStore.updateCampaign(job.campaignId, {
@@ -170,7 +172,8 @@ async function finalizeJob(jobId) {
         total: stats.total,
         sent: stats.sent + stats.delivered,
         delivered: stats.delivered,
-        failed: stats.failed
+        failed: stats.failed,
+        skipped: stats.skipped
       }
     }, job._id);
   }
@@ -194,6 +197,7 @@ async function processBatch() {
       if (jobs[jid] && ['queued', 'scheduled'].includes(jobs[jid].status)) {
         await messageStore.updateJob(jid, { status: 'processing', startedAt: new Date() });
         await syncEventStatus(jobs[jid], 'processing');
+        await syncFestivalStatus(jobs[jid], 'processing');
       }
     }
 

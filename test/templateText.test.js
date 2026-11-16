@@ -11,3 +11,13 @@ test('optional address placeholders do not leave separators or blank lines', () 
 test('punctuation and spacing in populated prose are preserved', () => {
   assert.equal(render('Dear {{Name}},\nHappy birthday!\nOffice: {{City}}, {{State}}', { Name: 'Example', City: 'Pune', State: 'Maharashtra' }), 'Dear Example,\nHappy birthday!\nOffice: Pune, Maharashtra');
 });
+
+test('message rendering retains intentional blank lines and spaces from the template', () => {
+  const text = 'Dear {{Name}},\n{{Company}}\n{{City}}\n\nWishing you  happy birthday!\n\nRMS Team';
+  assert.equal(render(text, { Name: 'Example', City: 'Pune' }),
+    'Dear Example,\nPune\n\nWishing you  happy birthday!\n\nRMS Team');
+});
+
+test('compact address rendering removes intentional blank lines only when requested', () => {
+  assert.equal(render('{{Name}}\n\n{{City}}, {{State}}', { Name: 'Example', City: 'Pune' }, { compact: true }), 'Example\nPune');
+});

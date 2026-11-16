@@ -4,7 +4,9 @@ test('campaign scheduling sends a UTC instant and IANA timezone to persistence a
   await rms.page.goto('/pages/campaigns.html');
   await rms.page.getByRole('button', { name: 'Create Campaign' }).click();
   await rms.page.locator('#campName').fill('Timezone Campaign');
-  await rms.page.locator('#campSchedule').fill('2026-10-01T10:00');
+  await rms.page.locator('#campContent').fill('Hello {{Name}}');
+  await rms.page.locator('#campAudience').selectOption('all');
+  await rms.page.locator('#campSchedule').fill('2099-10-01T10:00');
   await rms.page.getByRole('button', { name: 'Schedule' }).click();
 
   const campaignRequest = rms.api.requests.find(request => request.method === 'POST' && request.pathname === '/api/campaigns');
@@ -27,7 +29,7 @@ for (const scenario of [
     await rms.page.getByRole('button', { name: scenario.open }).click();
     if (scenario.fill) await rms.page.locator(scenario.fill[0]).fill(scenario.fill[1]);
     if (scenario.page === '/pages/invitations.html') await rms.page.locator('#eventAudience').selectOption('all');
-    await rms.page.locator(scenario.schedule).fill('2026-10-01T10:00');
+    await rms.page.locator(scenario.schedule).fill('2099-10-01T10:00');
     await rms.page.getByRole('button', { name: scenario.submit, exact: true }).click();
 
     const deliveryRequest = rms.api.requests.find(request => request.method === 'POST' && request.pathname === '/api/delivery/jobs');

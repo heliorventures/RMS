@@ -10,7 +10,7 @@ document.getElementById('pageBody').innerHTML = RMS.components.renderSkeletonCar
 
   document.getElementById('pageBody').innerHTML = `
     <div class="row g-3 mb-4">
-      ${statCard('primary', 'bi-people-fill', s.totalContacts, 'Total Contacts', '+12% this month')}
+      ${statCard('primary', 'bi-people-fill', s.totalContacts, 'Total Contacts', contactGrowthText(s.contactGrowth))}
       ${statCard('success', 'bi-cake2-fill', s.todayBirthdays, "Today's Birthdays", 'Send wishes now')}
       ${statCard('warning', 'bi-calendar-event', s.upcomingBirthdays, 'Upcoming Birthdays', 'Next 30 days')}
       ${statCard('info', 'bi-heart-fill', s.upcomingAnniversaries, 'Upcoming Anniversaries', 'Next 30 days')}
@@ -23,7 +23,7 @@ document.getElementById('pageBody').innerHTML = RMS.components.renderSkeletonCar
     <div class="row g-3 mb-4">
       <div class="col-lg-8">
         <div class="card">
-          <div class="card-header"><span><i class="bi bi-bar-chart me-2"></i>Campaign Statistics</span></div>
+          <div class="card-header"><span><i class="bi bi-bar-chart me-2"></i>Campaign Statistics</span><small class="text-secondary">Messages sent by month (UTC)</small></div>
           <div class="card-body"><div class="chart-container"><canvas id="messagesChart"></canvas></div></div>
         </div>
       </div>
@@ -88,20 +88,25 @@ document.getElementById('pageBody').innerHTML = RMS.components.renderSkeletonCar
 function statCard(color, icon, value, label, change) {
   return `<div class="col-xl-3 col-md-6"><div class="stat-card ${color}"><div class="stat-icon ${color}"><i class="bi ${icon}"></i></div><div class="stat-value count-up">${value || 0}</div><div class="stat-label">${label}</div><div class="stat-change up"><i class="bi bi-arrow-up-short"></i>${change}</div></div></div>`;
 }
+function contactGrowthText(growth) {
+  if (!growth) return 'Monthly growth unavailable';
+  if (Number.isFinite(growth.percent)) return `${growth.percent > 0 ? '+' : ''}${growth.percent}% this month`;
+  return `${Number(growth.addedThisMonth) || 0} added this month`;
+}
 function quickAction(href, icon, label) {
   return `<div class="col-6"><a href="${href}" class="quick-action"><i class="bi ${icon}"></i><span>${label}</span></a></div>`;
 }
 function renderBirthdayList(list) {
   if (!list.length) return '<div class="empty-state py-4"><i class="bi bi-cake2 d-block"></i>No birthdays today</div>';
-  return list.map(c => `<div class="d-flex align-items-center gap-3 p-3 border-bottom"><div class="avatar">${RMS.utils.getInitials(c.firstName, c.lastName)}</div><div class="flex-grow-1"><div class="fw-semibold">${c.firstName} ${c.lastName}</div><small class="text-secondary">${RMS.utils.formatContactSubtitle(c)} · ${c.city || ''}</small></div><a class="btn btn-sm btn-primary" href="/pages/birthdays.html">View birthdays</a></div>`).join('');
+  return list.map(c => `<div class="d-flex align-items-center gap-3 p-3 border-bottom"><div class="avatar">${RMS.utils.escapeHtml(RMS.utils.getInitials(c.firstName, c.lastName))}</div><div class="flex-grow-1"><div class="fw-semibold">${RMS.utils.escapeHtml(c.firstName)} ${RMS.utils.escapeHtml(c.lastName)}</div><small class="text-secondary">${RMS.utils.escapeHtml(RMS.utils.formatContactSubtitle(c))} · ${RMS.utils.escapeHtml(c.city)}</small></div><a class="btn btn-sm btn-primary" href="/pages/birthdays.html">View birthdays</a></div>`).join('');
 }
 function renderActivities(list) {
   if (!list.length) return '<div class="p-3 text-secondary small">No recent activity</div>';
-  return list.map(a => `<div class="d-flex gap-3 p-3 border-bottom"><div class="stat-icon primary" style="width:36px;height:36px;font-size:.9rem"><i class="bi bi-${a.type === 'email' ? 'envelope' : a.type === 'whatsapp' ? 'whatsapp' : 'chat'}"></i></div><div><div class="small fw-semibold">${a.contactName || a.subject}</div><div class="text-secondary" style="font-size:.75rem">${a.message?.substring(0, 60)}...</div><div class="time">${RMS.utils.formatDateTime(a.sentAt)}</div></div></div>`).join('');
+  return list.map(a => `<div class="d-flex gap-3 p-3 border-bottom"><div class="stat-icon primary" style="width:36px;height:36px;font-size:.9rem"><i class="bi bi-${a.type === 'email' ? 'envelope' : a.type === 'whatsapp' ? 'whatsapp' : 'chat'}"></i></div><div><div class="small fw-semibold">${RMS.utils.escapeHtml(a.contactName || a.subject)}</div><div class="text-secondary" style="font-size:.75rem">${RMS.utils.escapeHtml(a.message?.substring(0, 60))}...</div><div class="time">${RMS.utils.formatDateTime(a.sentAt)}</div></div></div>`).join('');
 }
 function renderRecentContacts(list) {
   if (!list.length) return '<div class="p-3 text-secondary small">No contacts yet</div>';
-  return list.map(c => `<a href="/pages/contact-profile.html?id=${c._id}" class="d-flex align-items-center gap-3 p-3 border-bottom text-decoration-none text-dark"><div class="avatar" style="background:${RMS.utils.getAvatarColor(c.firstName)}">${RMS.utils.getInitials(c.firstName, c.lastName)}</div><div><div class="fw-semibold">${c.firstName} ${c.lastName}</div><small class="text-secondary">${RMS.utils.formatContactSubtitle(c)} · ${c.city || ''}</small></div></a>`).join('');
+  return list.map(c => `<a href="/pages/contact-profile.html?id=${c._id}" class="d-flex align-items-center gap-3 p-3 border-bottom text-decoration-none text-dark"><div class="avatar" style="background:${RMS.utils.getAvatarColor(c.firstName)}">${RMS.utils.escapeHtml(RMS.utils.getInitials(c.firstName, c.lastName))}</div><div><div class="fw-semibold">${RMS.utils.escapeHtml(c.firstName)} ${RMS.utils.escapeHtml(c.lastName)}</div><small class="text-secondary">${RMS.utils.escapeHtml(RMS.utils.formatContactSubtitle(c))} · ${RMS.utils.escapeHtml(c.city)}</small></div></a>`).join('');
 }
 
 function initCharts(charts) {
@@ -109,19 +114,19 @@ function initCharts(charts) {
   const bData = charts.birthdaysByMonth || [];
   new Chart(document.getElementById('birthdayChart'), {
     type: 'bar',
-    data: { labels: bData.map(d => d.month), datasets: [{ label: 'Birthdays', data: bData.map(d => d.count), backgroundColor: '#2563eb', borderRadius: 6 }] },
+    data: { labels: bData.map(d => d.month), datasets: [{ label: 'Birthdays', data: bData.map(d => d.count), backgroundColor: RMS.utils.chartColors(bData.length), borderRadius: 6 }] },
     options: { ...chartOpts, plugins: { legend: { display: false } } }
   });
   const sector = charts.contactsBySector || {};
   new Chart(document.getElementById('sectorChart'), {
     type: 'doughnut',
-    data: { labels: Object.keys(sector), datasets: [{ data: Object.values(sector), backgroundColor: ['#2563eb','#7c3aed','#059669','#dc2626','#f59e0b','#0891b2','#6366f1'] }] },
+    data: { labels: Object.keys(sector), datasets: [{ data: Object.values(sector), backgroundColor: RMS.utils.chartColors(Object.keys(sector).length) }] },
     options: chartOpts
   });
   const religion = charts.contactsByReligion || {};
   new Chart(document.getElementById('religionChart'), {
     type: 'pie',
-    data: { labels: Object.keys(religion), datasets: [{ data: Object.values(religion), backgroundColor: ['#2563eb','#f59e0b','#10b981','#ef4444','#8b5cf6'] }] },
+    data: { labels: Object.keys(religion), datasets: [{ data: Object.values(religion), backgroundColor: RMS.utils.chartColors(Object.keys(religion).length) }] },
     options: chartOpts
   });
   const msgMonths = Array.isArray(charts.messagesByMonth) ? charts.messagesByMonth : [];
@@ -130,10 +135,11 @@ function initCharts(charts) {
     data: {
       labels: msgMonths.map(row => row.month),
       datasets: [
-        { label: 'Email', data: msgMonths.map(row => row.email || 0), borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,.1)', fill: true, tension: .4 },
-        { label: 'WhatsApp', data: msgMonths.map(row => row.whatsapp || 0), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.1)', fill: true, tension: .4 }
+        { label: 'Email', data: msgMonths.map(row => row.email || 0), borderColor: '#2563eb', backgroundColor: '#2563eb', fill: false, tension: 0 },
+        { label: 'WhatsApp', data: msgMonths.map(row => row.whatsapp || 0), borderColor: '#059669', backgroundColor: '#059669', borderDash: [6, 4], pointStyle: 'rect', fill: false, tension: 0 },
+        { label: 'SMS', data: msgMonths.map(row => row.sms || 0), borderColor: '#7c3aed', backgroundColor: '#7c3aed', borderDash: [2, 3], pointStyle: 'triangle', fill: false, tension: 0 }
       ]
     },
-    options: { ...chartOpts, scales: { y: { beginAtZero: true } } }
+    options: { ...chartOpts, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
   });
 }

@@ -52,9 +52,9 @@ function renderTemplates() {
   const filtered = activeType === 'all' ? allTemplates : allTemplates.filter(t => t.type === activeType);
   document.getElementById('templateGrid').innerHTML = filtered.map(t => `
     <div class="col-md-6"><div class="card h-100">
-      <div class="card-header d-flex justify-content-between"><span>${t.name} ${t.isDefault?'<span class="badge bg-primary">Default</span>':''}</span><span class="badge bg-secondary">${t.type}</span></div>
-      <div class="card-body"><p class="small fw-semibold">${t.subject||''}</p><pre class="small bg-light p-3 rounded" style="white-space:pre-wrap">${t.body}</pre>
-      <div>${(t.variables||[]).map(v=>`<span class="var-chip">{{${v}}}</span>`).join('')}</div></div>
+      <div class="card-header d-flex justify-content-between"><span>${RMS.utils.escapeHtml(t.name)} ${t.isDefault?'<span class="badge bg-primary">Default</span>':''}</span><span class="badge bg-secondary">${RMS.utils.escapeHtml(t.type)}</span></div>
+      <div class="card-body"><p class="small fw-semibold">${RMS.utils.escapeHtml(t.subject)}</p><pre class="small bg-light p-3 rounded" style="white-space:pre-wrap">${RMS.utils.escapeHtml(t.body)}</pre>
+      <div>${(t.variables||[]).map(v=>`<span class="var-chip">{{${RMS.utils.escapeHtml(v)}}}</span>`).join('')}</div></div>
       <div class="card-footer bg-transparent"><button class="btn btn-sm btn-outline-primary" onclick="editTemplate('${t._id}')"><i class="bi bi-pencil"></i> Edit</button>
       <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteTemplate('${t._id}')" aria-label="Delete template"><i class="bi bi-trash"></i></button></div>
     </div></div>`).join('');

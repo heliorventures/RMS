@@ -5,6 +5,7 @@ const deliveryJobSchema = new mongoose.Schema({
   type: { type: String, enum: ['campaign', 'bulk', 'event', 'birthday', 'anniversary', 'festival'], default: 'bulk' },
   campaignId: { type: mongoose.Schema.Types.ObjectId, ref: 'Campaign' },
   eventId: { type: mongoose.Schema.Types.ObjectId, ref: 'Event' },
+  festivalId: { type: mongoose.Schema.Types.ObjectId, ref: 'Festival' },
   channel: { type: String, enum: ['email', 'whatsapp', 'sms', 'both'], default: 'email' },
   status: {
     type: String,

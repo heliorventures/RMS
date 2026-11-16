@@ -51,10 +51,12 @@ function createCrudController(Model, collection) {
       try {
         const data = normalizeInput(req.body, collection);
         if (req.file) data[req.file.fieldname === 'file' ? 'image' : req.file.fieldname] = `/uploads/${req.params.type || 'general'}/${req.file.filename}`;
-        const item = await Model.create(data);
+        const item = collection === 'templates'
+          ? await require('../services/templateDefaults').saveTemplate(data, null, input => Model.create(input))
+          : await Model.create(data);
         res.status(201).json({ success: true, data: item });
       } catch (err) {
-        res.status(err.status || (['ValidationError', 'CastError'].includes(err.name) ? 400 : 500)).json({ success: false, message: err.message });
+        res.status(err.status || (err.code === 11000 ? 409 : ['ValidationError', 'CastError'].includes(err.name) ? 400 : 500)).json({ success: false, message: err.code === 11000 ? 'Another template was selected as default. Reload and try again.' : err.message });
       }
     },
 
@@ -63,11 +65,14 @@ function createCrudController(Model, collection) {
         const data = normalizeInput(req.body, collection);
         if (req.file) data.image = `/uploads/${req.params.type || 'general'}/${req.file.filename}`;
         const updates = collection === 'events' ? { $set: data } : data;
-        const item = await Model.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
+        const item = collection === 'templates'
+          ? await require('../services/templateDefaults').saveTemplate(data, req.params.id,
+            input => Model.findByIdAndUpdate(req.params.id, input, { new: true, runValidators: true }))
+          : await Model.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
         if (!item) return res.status(404).json({ success: false, message: 'Not found.' });
         res.json({ success: true, data: item });
       } catch (err) {
-        res.status(err.status || (['ValidationError', 'CastError'].includes(err.name) ? 400 : 500)).json({ success: false, message: err.message });
+        res.status(err.status || (err.code === 11000 ? 409 : ['ValidationError', 'CastError'].includes(err.name) ? 400 : 500)).json({ success: false, message: err.code === 11000 ? 'Another template was selected as default. Reload and try again.' : err.message });
       }
     },
 

@@ -9,6 +9,9 @@ const templateSchema = new mongoose.Schema({
   variables: [String],
   isDefault: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true }
-}, { timestamps: true });
+}, { timestamps: true, autoIndex: false });
+
+// Startup reconciles legacy duplicates before explicitly creating this index.
+templateSchema.index({ type: 1 }, { name: 'one_default_template_per_type', unique: true, partialFilterExpression: { isDefault: true } });
 
 module.exports = mongoose.model('Template', templateSchema);

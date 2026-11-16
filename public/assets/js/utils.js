@@ -3,6 +3,9 @@ window.RMS = window.RMS || {};
 window.RMS.utils = {
   locale: 'en-IN',
   timeZone: 'Asia/Kolkata',
+  escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+  },
   formatDate(d) {
     if (!d) return '-';
     return new Intl.DateTimeFormat(this.locale, {
@@ -167,6 +170,11 @@ window.RMS.utils = {
 
   queryParams() {
     return Object.fromEntries(new URLSearchParams(window.location.search));
+  },
+
+  chartColors(count) {
+    const palette = ['#2563eb', '#7c3aed', '#059669', '#dc2626', '#d97706', '#0891b2', '#db2777'];
+    return Array.from({ length: count }, (_, index) => palette[index] || `hsl(${(index * 137.508) % 360}, 65%, 45%)`);
   },
 
   downloadCSV(filename, rows) {

@@ -10,6 +10,10 @@ const { normalizePhone } = require('../services/whatsappConsent');
 const Event = require('../models/Event');
 const { eventAttachments } = require('../utils/invitationAttachments');
 const { syncEventStatus } = require('../services/invitationLifecycle');
+const Campaign = require('../models/Campaign');
+const Festival = require('../models/Festival');
+const { prepareFestival, restoreFestivalPreparation, syncFestivalStatus, lockFestivalRetry } = require('../services/festivalLifecycle');
+const { campaignDelivery, resolveCampaignRecipients } = require('../utils/campaignAudience');
 
 const DEFAULT_MAX_RETRIES = Number(process.env.DELIVERY_MAX_RETRIES) || 3;
 const DEFAULT_BATCH = Number(process.env.DELIVERY_BATCH_SIZE) || 25;
@@ -18,7 +22,33 @@ async function createDeliveryJob(req, res) {
   let preparingJob;
   let publishing = false;
   let previousCampaign;
+  let previousFestival;
   try {
+    if (['campaignId', 'eventId', 'festivalId'].filter(key => req.body[key]).length > 1) return res.status(400).json({ success: false, message: 'Choose only one delivery source.' });
+    let festival;
+    if (req.body.festivalId) {
+      festival = await Festival.findById(req.body.festivalId).lean();
+      if (!festival) return res.status(404).json({ success: false, message: 'Festival not found.' });
+      if (festival.status === 'scheduled' && festival.deliveryJobId) {
+        const existing = festival.deliveryJobId && await messageStore.getJob(festival.deliveryJobId);
+        if (existing?.publicationState === 'published') return res.status(200).json({ success: true, data: existing, message: 'Festival delivery is already queued.' });
+        return res.status(409).json({ success: false, message: 'Festival delivery is being prepared. Check Delivery Tracking before sending again.' });
+      }
+      req.body = { ...req.body, type: 'festival', channel: festival.channel || 'email',
+        name: `Festival: ${festival.name}`, subject: festival.name,
+        body: festival.message || `Warm wishes on ${festival.name}, {{Name}}!`,
+        scheduledAt: festival.scheduledAt?.toISOString() || null, scheduleTimezone: festival.scheduleTimezone,
+        contactIds: [], groupIds: festival.recipients?.groups || [], audience: 'selected',
+        filters: { cities: festival.recipients?.cities || [], sectors: festival.recipients?.sectors || [], religions: festival.recipients?.religions?.length ? festival.recipients.religions : festival.religion ? [festival.religion] : [] } };
+    }
+    let campaign;
+    if (req.body.campaignId || req.body.type === 'campaign') {
+      if (!req.body.campaignId) return res.status(400).json({ success: false, message: 'Choose a saved campaign before scheduling.' });
+      campaign = await Campaign.findById(req.body.campaignId).lean();
+      if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found.' });
+      const prepared = campaignDelivery(campaign);
+      req.body = { ...req.body, ...prepared, scheduledAt: prepared.scheduledAt.toISOString() };
+    }
     let attachments = [];
     let eventId = null;
     if (req.body.eventId) {
@@ -77,6 +107,8 @@ async function createDeliveryJob(req, res) {
     if (req.body.audience === 'all') {
       finalRecipients = allContacts.filter(c => c.status !== 'Inactive');
     }
+    if (campaign) finalRecipients = resolveCampaignRecipients(campaign, allContacts, allGroups);
+    if (festival) finalRecipients = filterContacts(groupIds.length ? recipients : allContacts, filters);
     if (!finalRecipients.length) {
       return res.status(400).json({ success: false, message: 'No recipients found for this job.' });
     }
@@ -101,6 +133,7 @@ async function createDeliveryJob(req, res) {
       type: eventId ? 'event' : type,
       campaignId: campaignId || null,
       eventId: eventId || null,
+      festivalId: festival?._id || null,
       channel,
       status: 'preparing',
       publicationState: 'preparing',
@@ -152,6 +185,7 @@ async function createDeliveryJob(req, res) {
         ? (stats.sent + stats.delivered > 0 ? 'partial' : 'failed')
         : 'completed';
     // Prepare metadata while this job is still invisible to workers.
+    if (festival) previousFestival = await prepareFestival(festival, job, status);
     if (eventId) {
       const event = await Event.findByIdAndUpdate(eventId, { status, deliveryJobId: job._id }, { new: true, runValidators: true });
       if (!event) throw Object.assign(new Error('Invitation no longer exists.'), { status: 404 });
@@ -160,7 +194,7 @@ async function createDeliveryJob(req, res) {
     if (campaignId) {
       previousCampaign = await messageStore.prepareCampaign(campaignId, job._id, {
         status: status === 'queued' ? 'running' : status,
-        stats: { total: stats.total, sent: stats.sent + stats.delivered, delivered: stats.delivered, failed: stats.failed }
+        stats: { total: stats.total, sent: stats.sent + stats.delivered, delivered: stats.delivered, failed: stats.failed, skipped: stats.skipped }
       });
     }
 
@@ -182,6 +216,7 @@ async function createDeliveryJob(req, res) {
         const aborted = await messageStore.abortJobPreparation(preparingJob._id, err.message);
         if (aborted) {
           await syncEventStatus(preparingJob, 'failed');
+          if (previousFestival) await restoreFestivalPreparation(preparingJob, previousFestival);
           if (previousCampaign) await messageStore.restoreCampaignPreparation(preparingJob, previousCampaign);
         }
         else if (publishing) {
@@ -244,18 +279,20 @@ async function retryFailed(req, res) {
     if (['preparing', 'aborted'].includes(job.publicationState)) {
       return res.status(409).json({ success: false, message: 'This job was not published. Its partial recipient list cannot be retried.' });
     }
+    await lockFestivalRetry(job);
     const count = await messageStore.requeueFailedMessages(job._id);
     const stats = await messageStore.recountJobStats(job._id);
     if (count > 0) {
       await messageStore.updateJob(job._id, { status: 'queued', stats, completedAt: null });
       await syncEventStatus(job, 'queued');
+      await syncFestivalStatus(job, 'queued', stats);
     }
     else await require('../services/deliveryQueue').finalizeJob(job._id);
 
     logger.info('Failed messages requeued', { jobId: job._id, count });
     res.json({ success: true, data: { requeued: count, stats }, message: count ? `${count} failed messages requeued` : 'No eligible messages to retry. Uncertain WhatsApp outcomes require checking Meta logs before creating a new delivery.' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(err.status || 500).json({ success: false, message: err.message });
   }
 }
 

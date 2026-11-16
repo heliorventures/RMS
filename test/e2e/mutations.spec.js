@@ -68,7 +68,8 @@ test('campaign scheduling creates a campaign and a delivery job', async ({ rms }
   await expect(rms.page.locator('#campaignModal')).toHaveClass(/show/);
   await rms.page.locator('#campName').fill('October Greeting');
   await rms.page.locator('#campContent').fill('Hello {{Name}}');
-  await rms.page.locator('#campSchedule').fill('2026-10-01T10:00');
+  await rms.page.locator('#campAudience').selectOption('all');
+  await rms.page.locator('#campSchedule').fill('2099-10-01T10:00');
   await rms.page.getByRole('button', { name: 'Schedule' }).click();
 
   await expect.poll(() => rms.api.requests.filter(request => request.method === 'POST' && request.pathname === '/api/campaigns').length).toBe(1);

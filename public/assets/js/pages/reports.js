@@ -51,17 +51,17 @@ async function initReports() {
     return;
   }
   const cr = contactReport?.data || {};
-  makeChart('cityChart', 'bar', Object.keys(cr.byCity||{}), Object.values(cr.byCity||{}), '#2563eb');
+  makeChart('cityChart', 'bar', Object.keys(cr.byCity||{}), Object.values(cr.byCity||{}));
   makeChart('sectorReportChart', 'doughnut', Object.keys(cr.bySector||{}), Object.values(cr.bySector||{}));
   makeChart('religionReportChart', 'pie', Object.keys(cr.byReligion||{}), Object.values(cr.byReligion||{}));
   const br = birthdayReport?.data?.byMonth || {};
-  makeChart('birthdayReportChart', 'bar', Object.keys(br), Object.values(br), '#10b981');
+  makeChart('birthdayReportChart', 'bar', Object.keys(br), Object.values(br));
   const camp = campaignReport?.data || {};
   document.getElementById('campaignReport').innerHTML = `<h5>Total Campaigns: ${camp.total||0}</h5><div class="row g-3 mt-2">${Object.entries(camp.byType||{}).map(([k,v])=>`<div class="col-md-3"><div class="stat-card"><div class="stat-value">${v}</div><div class="stat-label">${k}</div></div></div>`).join('')}</div>`;
   const messages = deliveryReport?.data?.messages || [];
   document.querySelector('#deliveryTable tbody').innerHTML = messages.map(m=>`<tr><td>${m.type}</td><td>${m.subject||'-'}</td><td>${RMS.utils.statusBadge(m.status)}</td><td>${RMS.utils.formatDateTime(m.sentAt)}</td></tr>`).join('') || '<tr><td colspan="4" class="text-center">No data</td></tr>';
 }
-function makeChart(id, type, labels, data, color) {
+function makeChart(id, type, labels, data) {
   const el = document.getElementById(id); if (!el) return;
-  new Chart(el, { type, data: { labels, datasets: [{ data, backgroundColor: color || ['#2563eb','#7c3aed','#10b981','#f59e0b','#ef4444','#0891b2'], borderRadius: 6 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } } });
+  new Chart(el, { type, data: { labels, datasets: [{ data, backgroundColor: RMS.utils.chartColors(labels.length), borderRadius: 6 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', display: type !== 'bar' } }, ...(type === 'bar' ? { scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } } : {}) } });
 }

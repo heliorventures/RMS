@@ -9,8 +9,9 @@ document.getElementById('pageBody').innerHTML = `
         <div class="col-md-6"><label class="form-label">Festival Name *</label><input class="form-control" id="festName" required></div>
         <div class="col-md-6"><label class="form-label">Date *</label><input type="date" class="form-control" id="festDate" required></div>
         <div class="col-md-6"><label class="form-label">Religion</label><select class="form-select" id="festReligion"><option>Hindu</option><option>Jain</option><option>Muslim</option><option>Christian</option><option>Sikh</option></select></div>
-        <div class="col-md-6"><label class="form-label">Status</label><select class="form-select" id="festStatus"><option value="draft">Draft</option><option value="scheduled">Scheduled</option><option value="sent">Sent</option></select></div>
+        <div class="col-md-6"><label class="form-label">Status</label><select class="form-select" id="festStatus"><option value="draft">Draft</option><option value="scheduled">Scheduled</option></select></div>
         <div class="col-12"><label class="form-label">Message</label><textarea class="form-control" id="festMessage" rows="3"></textarea></div>
+        <div class="col-md-6"><label class="form-label" for="festChannel">Send via</label><select class="form-select" id="festChannel"><option value="email">Email</option><option value="whatsapp">WhatsApp</option><option value="both">Both</option></select></div>
         <div class="col-md-6"><label class="form-label">Filter by City</label><select class="form-select" id="festCity" multiple><option>Pune</option><option>Mumbai</option><option>Delhi</option><option>Bangalore</option></select></div>
         <div class="col-md-6"><label class="form-label">Filter by Sector</label><select class="form-select" id="festSector" multiple><option>Government</option><option>Builder</option><option>Consultant</option></select></div>
         <div class="col-12"><label class="form-label">Schedule Send</label><input type="datetime-local" class="form-control" id="festSchedule"></div>
@@ -20,18 +21,29 @@ document.getElementById('pageBody').innerHTML = `
   </div></div></div>`;
 
 let allFestivals = [];
+loadFestivalFilters();
 loadFestivals();
+
+async function loadFestivalFilters() {
+  const populate = options => {
+    RMS.contactData.populateFilter(document.getElementById('festCity'), options.city);
+    RMS.contactData.populateFilter(document.getElementById('festSector'), options.sector);
+  };
+  populate(RMS.contactData.choices);
+  try { populate(await RMS.contactData.loadFilterOptions()); }
+  catch (error) { RMS.toast.show(`Saved filter values could not be loaded: ${error.message}`, 'warning'); }
+}
 
 async function loadFestivals() {
   const res = await RMS.api.get('/festivals');
   allFestivals = res?.data || [];
   document.getElementById('festivalGrid').innerHTML = allFestivals.map(f => `
     <div class="col-md-4"><div class="card h-100">
-      <div class="card-header gradient d-flex justify-content-between"><span><i class="bi bi-stars me-2"></i>${f.name}</span>${RMS.utils.statusBadge(f.status)}</div>
+      <div class="card-header gradient d-flex justify-content-between"><span><i class="bi bi-stars me-2"></i>${RMS.utils.escapeHtml(f.name)}</span>${RMS.utils.statusBadge(f.status)}</div>
       <div class="card-body">
         <p class="mb-2"><i class="bi bi-calendar me-2"></i>${RMS.utils.formatDate(f.date)}</p>
-        <p class="mb-2"><i class="bi bi-bookmark me-2"></i>${f.religion}</p>
-        <p class="small text-secondary">${(f.message||'').substring(0,100)}...</p>
+        <p class="mb-2"><i class="bi bi-bookmark me-2"></i>${RMS.utils.escapeHtml(f.religion)}</p>
+        <p class="small text-secondary">${RMS.utils.escapeHtml((f.message||'').substring(0,100))}...</p>
         ${f.sentCount ? `<p class="small"><i class="bi bi-send me-1"></i>${f.sentCount} sent</p>` : ''}
       </div>
       <div class="card-footer bg-transparent d-flex gap-2">
@@ -64,8 +76,9 @@ window.editFestival = async (id) => {
   document.getElementById('festName').value = festival.name || '';
   document.getElementById('festDate').value = festival.date ? festival.date.split('T')[0] : '';
   document.getElementById('festReligion').value = festival.religion || 'Hindu';
-  document.getElementById('festStatus').value = festival.status || 'draft';
+  document.getElementById('festStatus').value = festival.status === 'scheduled' ? 'scheduled' : 'draft';
   document.getElementById('festMessage').value = festival.message || '';
+  document.getElementById('festChannel').value = festival.channel || 'email';
 
   const cities = festival.recipients?.cities || [];
   const sectors = festival.recipients?.sectors || [];
@@ -94,8 +107,9 @@ async function queueFestivalDeliveryRaw(festival, setPhase = () => {}) {
   setPhase('queueing');
   const payload = {
     name: `Festival: ${festival.name}`,
+    festivalId: festival._id,
     type: 'festival',
-    channel: 'both',
+    channel: festival.channel || 'email',
     subject: festival.name,
     body: festival.message || `Warm wishes on ${festival.name}, {{Name}}!`,
     filters,
@@ -103,8 +117,6 @@ async function queueFestivalDeliveryRaw(festival, setPhase = () => {}) {
     scheduleTimezone: festival.scheduleTimezone || RMS.datetime.browserTimezone()
   };
   const jobRes = await RMS.api.post('/delivery/jobs', await RMS.utils.withWhatsAppTemplate(payload));
-  setPhase('updating-status');
-  await RMS.api.put(`/festivals/${festival._id}`, { status: 'scheduled', sentCount: jobRes.data?.stats?.total || 0 });
   return {
     ...jobRes.data,
     scheduledAt: payload.scheduledAt,
@@ -114,8 +126,14 @@ async function queueFestivalDeliveryRaw(festival, setPhase = () => {}) {
 
 function validateFestival() {
   const name = document.getElementById('festName').value.trim();
-  if (name) return true;
-  return RMS.mutations.showValidationError('#festivalForm', 'Festival name is required', '#festName');
+  if (!name) return RMS.mutations.showValidationError('#festivalForm', 'Festival name is required', '#festName');
+  const scheduleValue = document.getElementById('festSchedule').value;
+  try {
+    const schedule = RMS.datetime.fromLocalInput(scheduleValue);
+    if (schedule.scheduledAt && new Date(schedule.scheduledAt) <= new Date()) throw new Error('Choose a future schedule time.');
+    if (document.getElementById('festStatus').value === 'scheduled' && !schedule.scheduledAt) throw new Error('Choose a future time to schedule this festival.');
+  } catch (error) { return RMS.mutations.showValidationError('#festivalForm', error.message, '#festSchedule'); }
+  return true;
 }
 
 function festivalFormData() {
@@ -128,6 +146,7 @@ function festivalFormData() {
     date: document.getElementById('festDate').value,
     religion: document.getElementById('festReligion').value,
     message: document.getElementById('festMessage').value,
+    channel: document.getElementById('festChannel').value,
     status: document.getElementById('festStatus').value,
     ...schedule,
     recipients: {
@@ -142,19 +161,30 @@ function festivalFormData() {
 async function persistFestival() {
   const id = document.getElementById('festivalId').value;
   const data = festivalFormData();
+  // The queued job is the authority for scheduled status, after publication.
+  if (data.scheduledAt) data.status = 'draft';
   const res = id
     ? await RMS.api.put(`/festivals/${id}`, data)
     : await RMS.api.post('/festivals', data);
+  if (res.data?._id) document.getElementById('festivalId').value = res.data._id;
   return { ...res.data, ...data, _id: res.data?._id };
 }
 
 window.saveFestival = async (button) => {
   if (!validateFestival()) return;
   const isUpdate = Boolean(document.getElementById('festivalId').value);
-  const result = await RMS.mutations.runMutation(button, persistFestival, {
+  let saved;
+  const result = await RMS.mutations.runMutation(button, async () => {
+    saved = await persistFestival();
+    if (saved.scheduledAt) await queueFestivalDeliveryRaw(saved);
+    return saved;
+  }, {
     form: '#festivalForm',
     pending: 'Saving…',
-    success: isUpdate ? 'Festival updated' : 'Festival created'
+    success: festival => festival.scheduledAt
+      ? RMS.utils.formatScheduleConfirmation('Festival delivery scheduled', festival.scheduledAt, festival.scheduleTimezone)
+      : isUpdate ? 'Festival updated' : 'Festival created',
+    error: error => saved ? `Festival saved, but delivery queue failed: ${error.message}` : error.message
   });
   if (!result.ok) return;
   bootstrap.Modal.getInstance(document.getElementById('festivalModal')).hide();
@@ -177,7 +207,6 @@ window.sendFestival = async (button) => {
     ),
     error: (error) => {
       if (phase === 'queueing') return `Festival saved, but delivery queue failed: ${error.message}`;
-      if (phase === 'updating-status') return `Delivery was queued, but festival status could not be updated: ${error.message}`;
       return error.message;
     }
   });
@@ -187,7 +216,6 @@ window.sendFestival = async (button) => {
 };
 
 window.sendFestivalById = async (id, button) => {
-  let phase = 'loading';
   const result = await RMS.mutations.runMutation(button, async () => {
     let festival = allFestivals.find(f => f._id === id);
     if (!festival) {
@@ -195,7 +223,7 @@ window.sendFestivalById = async (id, button) => {
       festival = res?.data;
     }
     if (!festival) throw new Error('Festival not found');
-    return queueFestivalDeliveryRaw(festival, nextPhase => { phase = nextPhase; });
+    return queueFestivalDeliveryRaw(festival);
   }, {
     pending: 'Sending…',
     success: (job) => RMS.utils.formatScheduleConfirmation(
@@ -203,9 +231,7 @@ window.sendFestivalById = async (id, button) => {
       job.scheduledAt,
       job.scheduleTimezone
     ),
-    error: (error) => phase === 'updating-status'
-      ? `Delivery was queued, but festival status could not be updated: ${error.message}`
-      : error.message
+    error: (error) => error.message
   });
   if (result.ok) await loadFestivals();
 };

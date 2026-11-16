@@ -182,7 +182,7 @@ body {
 .nav-tabs .nav-link,
 .nav-pills .nav-link { color: #334155; }
 .nav-pills { --bs-nav-pills-link-active-bg: #1d4ed8; --bs-nav-pills-link-active-color: #fff; }
-.nav-tabs .nav-link.active,
+.nav-tabs .nav-link.active { color: var(--text-primary); background-color: var(--bg-card); border-color: var(--border) var(--border) var(--bg-card); }
 .nav-pills .nav-link.active { color: #fff; }
 
 .avatar { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: .85rem; color: #fff !important; background: linear-gradient(135deg, var(--primary), #60a5fa); flex-shrink: 0; }

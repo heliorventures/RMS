@@ -40,6 +40,17 @@ function setRecipientReady(ready) {
   document.getElementById('eventGroups').disabled = !ready;
 }
 const escapeEvent = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+const clearEventGroups = document.createElement('button');
+clearEventGroups.type = 'button';
+clearEventGroups.className = 'btn btn-sm btn-outline-secondary mt-2';
+clearEventGroups.textContent = 'Clear selected groups';
+clearEventGroups.onclick = () => {
+  const picker = document.getElementById('eventGroups');
+  if (picker.disabled) return;
+  for (const option of picker.options) option.selected = false;
+  picker.dispatchEvent(new Event('change', { bubbles: true }));
+};
+document.getElementById('eventGroups').after(clearEventGroups);
 document.getElementById('eventAudience').addEventListener('change', () => {
   document.getElementById('eventRecipientPicker').classList.toggle('d-none', document.getElementById('eventAudience').value === 'all');
 });

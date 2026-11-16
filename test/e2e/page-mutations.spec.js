@@ -98,23 +98,25 @@ test('invitation send leaves delivery state to the server job lifecycle', async 
   await rms.page.locator('#eventAudience').selectOption('all');
   await rms.page.getByRole('button', { name: 'Send', exact: true }).click();
 
-  expect(rms.api.requests.filter(request => request.method === 'POST' && request.pathname === '/api/delivery/jobs')).toHaveLength(1);
+  await expect.poll(() => rms.api.requests.filter(request => request.method === 'POST' && request.pathname === '/api/delivery/jobs').length).toBe(1);
   expect(rms.api.requests.filter(request => request.method === 'PUT' && request.pathname === '/api/events/507f1f77bcf86cd799439015')).toHaveLength(0);
   await expect(rms.page.getByText('Invitation queued for delivery', { exact: true })).toHaveCount(1);
   await expect(rms.page.locator('#eventModal')).not.toHaveClass(/show/);
 });
 
-test('festival send reports when delivery queued but status persistence failed', async ({ rms }) => {
+test('festival send leaves delivery state to the server job lifecycle', async ({ rms }) => {
   rms.api.fail('PUT', '/api/festivals/507f1f77bcf86cd799439016', 500, 'Festival status persistence failed');
   await rms.page.goto('/pages/festivals.html');
   await rms.page.getByRole('button', { name: 'Add Festival' }).click();
   await rms.page.locator('#festName').fill('Partial Festival');
   await rms.page.getByRole('button', { name: 'Send', exact: true }).click();
 
-  await expect(rms.page.locator('#festivalForm').getByRole('alert')).toContainText('Delivery was queued, but festival status could not be updated');
-  expect(rms.api.requests.filter(request => request.method === 'POST' && request.pathname === '/api/delivery/jobs')).toHaveLength(1);
-  await expect(rms.page.getByText('Festival message queued for delivery', { exact: true })).toHaveCount(0);
-  await expect(rms.page.locator('#festivalModal')).toHaveClass(/show/);
+  await expect.poll(() => rms.api.requests.filter(request => request.method === 'POST' && request.pathname === '/api/delivery/jobs').length).toBe(1);
+  const job = rms.api.requests.find(request => request.method === 'POST' && request.pathname === '/api/delivery/jobs');
+  expect(job.body.festivalId).toBe('507f1f77bcf86cd799439016');
+  expect(rms.api.requests.filter(request => request.method === 'PUT' && request.pathname === '/api/festivals/507f1f77bcf86cd799439016')).toHaveLength(0);
+  await expect(rms.page.getByText('Festival message queued for delivery', { exact: true })).toHaveCount(1);
+  await expect(rms.page.locator('#festivalModal')).not.toHaveClass(/show/);
 });
 
 test('birthday provider failure reports an error and never reports queued', async ({ rms }) => {

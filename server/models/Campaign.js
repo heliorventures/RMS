@@ -11,6 +11,7 @@ const campaignSchema = new mongoose.Schema({
     filters: mongoose.Schema.Types.Mixed
   },
   content: String,
+  audience: { type: String, enum: ['selected', 'all'], default: 'selected' },
   deliveryJobId: { type: mongoose.Schema.Types.ObjectId, ref: 'DeliveryJob' },
   scheduledAt: Date,
   scheduleTimezone: String,
@@ -20,6 +21,7 @@ const campaignSchema = new mongoose.Schema({
     sent: { type: Number, default: 0 },
     delivered: { type: Number, default: 0 },
     failed: { type: Number, default: 0 },
+    skipped: { type: Number },
     opened: { type: Number, default: 0 }
   }
 }, { timestamps: true });

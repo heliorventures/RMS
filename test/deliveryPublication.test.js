@@ -20,6 +20,7 @@ test('event update operators and dotted keys never reach MongoDB', async t => {
 function fixture(t) {
   let job;
   const messages = [];
+  t.mock.method(require('../server/models/Campaign'), 'findById', () => ({ lean: async () => ({ _id: 'campaign-1', name: 'Greeting', type: 'email', channel: 'email', content: 'Hello', audience: 'all', status: 'draft', scheduledAt: new Date('2099-10-01T10:00:00Z'), scheduleTimezone: 'UTC' }) }));
   t.mock.method(store, 'getAllContacts', async () => [{ _id: 'contact-1', email: 'a@example.com' }]);
   t.mock.method(store, 'getAllGroups', async () => []);
   t.mock.method(store, 'createJob', async data => (job = { ...data, _id: 'job-1' }));

@@ -8,6 +8,7 @@ const router = express.Router();
 router.use(auth);
 
 router.get('/', contactController.getAll);
+router.get('/filter-options', contactController.getFilterOptions);
 router.get('/birthdays/calendar', contactController.getBirthdayCalendar);
 router.get('/birthdays', contactController.getBirthdays);
 router.get('/anniversaries', contactController.getAnniversaries);
